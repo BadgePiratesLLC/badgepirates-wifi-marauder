@@ -74,10 +74,9 @@ CommandLine cli_obj;
   Adafruit_NeoPixel strip = Adafruit_NeoPixel(Pixels, PIN, NEO_GRB + NEO_KHZ800);
 #endif
 
-#ifdef HAS_SEPARATE_SD
-  SPIClass sdSPI(SPI);
-#endif
-
+// SD card uses dedicated SPI bus (MOSI:35, SCK:36, MISO:37, CS:47).
+// HAS_CYD_TOUCH path in SDInterface::initSD() creates its own SPIClass
+// using SD_SCK/SD_MISO/SD_MOSI/SD_CS pins — no external SPI object needed.
 #ifdef HAS_SD
   SDInterface sd_obj;
 #endif

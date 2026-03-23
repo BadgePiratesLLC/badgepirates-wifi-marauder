@@ -1,99 +1,128 @@
 # Storage Implementation Notes — Phase 5
 
-Build verified: **SUCCESS** (ESP32-S3, 22.4% Flash, 21.0% RAM)
+## SD Card Hardware Configuration
 
-## Issue #47: PCAP Storage
+The BSidesKC badge has an SD card on a **dedicated SPI bus**, separate from the display SPI:
 
-**Files:** `Buffer.cpp`, `Buffer.h`
+| Signal | Pin | Notes |
+|--------|-----|-------|
+| MOSI   | 35  | SD_MOSI_PIN |
+| SCK    | 36  | SD_SCK_PIN  |
+| MISO   | 37  | SD_MISO_PIN |
+| CS     | 47  | SD_CS_PIN   |
 
-The Buffer class implements a dual-buffer PCAP writer with SD card persistence:
+Display SPI uses pins 11 (MOSI), 12 (SCLK), 10 (CS) — no pin conflicts.
 
-- **Double buffering:** Two 8KB buffers (`bufA`/`bufB`) allocated via `malloc()` at construction. When the active buffer nears capacity, writing flips to the other buffer while the full one is flushed to SD.
-- **PCAP file creation:** `createFile()` generates unique filenames (`/name_0.pcap`, `/name_1.pcap`, ...) by checking `fs->exists()` to avoid overwrites.
-- **PCAP header:** `open(true)` writes the standard libpcap global header (magic `0xa1b2c3d4`, version 2.4, link type 105 = IEEE 802.11).
-- **Packet records:** `add()` prepends each packet with timestamp (seconds + microseconds from `micros()`) and length fields per the PCAP record format.
-- **Save gating:** `openFile()` checks `settings_obj.loadSetting<bool>("SavePCAP")` — if false, no file is opened and `writing` stays false. The `append()` methods also check this setting before buffering.
-- **Filesystem abstraction:** Buffer accepts `fs::FS*`, so it works with SD, SPIFFS, or any FS implementation.
-- **Serial output:** `saveSerial()` wraps buffer data in `[BUF/BEGIN]`/`[BUF/CLOSE]` markers for Flipper/serial capture.
-- **Badge config:** `BUF_SIZE = 8*1024`, `SNAP_LEN = 4096` (PSRAM-enabled path in `marauder_config.h`).
+### How the Separate Bus Works
 
-**Status:** Fully functional. Compiles clean.
+The badge defines `HAS_CYD_TOUCH` and `HAS_SEPARATE_SD` in `marauder_config.h`. In upstream `SDInterface::initSD()`, the `HAS_CYD_TOUCH` preprocessor path:
 
-## Issue #48: Evil Portal HTML Storage
+1. Reads `SD_SCK`, `SD_MISO`, `SD_MOSI` from our pin defines (36, 37, 35)
+2. Creates a new `SPIClass()` internally (`spiExt` member)
+3. Calls `spiExt->begin(SCK, MISO, MOSI, CS)` then `SD.begin(CS, *spiExt)`
 
-**Files:** `EvilPortal.cpp`, `EvilPortal.h`
+No external SPI object is needed in `main.cpp` — the SDInterface manages it internally.
 
-Evil Portal loads and serves HTML files from SD card:
+## Upstream Storage Patterns
 
-- **HTML discovery:** `setup()` calls `sd_obj.listDirToLinkedList(html_files, "/", "html")` to enumerate all `.html` files on SD root into a `LinkedList<String>`.
-- **HTML loading:** `setHtml()` reads the target HTML file (default `index.html`) from SD via `sd_obj.getFile("/" + target_html_name)`. File size is capped at `MAX_HTML_SIZE` (30000 bytes with PSRAM).
-- **PSRAM allocation:** With `HAS_PSRAM`, `index_html` is heap-allocated via `ps_malloc(MAX_HTML_SIZE)`. Without PSRAM, it's a static `char[11400]` array.
-- **Serial HTML injection:** `setHtmlFromSerial()` allows setting HTML content over serial without SD.
-- **Web server:** AsyncWebServer on port 80 serves `index_html` on `/` and all captive portal detection endpoints. Credential capture via `/get` endpoint stores email/password and logs to `buffer_obj.append()`.
-- **AP configuration:** Reads AP name from (in priority order): SSID list → selected AP → `/ap.config.txt` on SD.
-- **Captive DNS:** DNSServer on port 53 redirects all DNS queries to the portal IP (`172.0.0.1`).
+### SDInterface (SDInterface.cpp/h)
 
-**Status:** Fully functional. Compiles clean.
+Core SD abstraction. Key methods:
+- `initSD()` — mounts SD, detects card type/size, creates `/SCRIPTS` dir
+- `getFile(path)` — opens file for reading
+- `removeFile(path)` — deletes a file
+- `listDir(path)` — prints directory listing to Serial
+- `listDirToLinkedList(list, dir, ext)` — populates LinkedList with filenames, optional extension filter
+- `runUpdate(file)` — OTA update from SD card (`/update.bin`)
 
-## Issue #49: Settings Persistence
+Global instance: `SDInterface sd_obj;` (no-arg constructor for non-C5 boards).
 
-**Files:** `settings.cpp`, `settings.h`
+### Buffer (Buffer.cpp/h) — PCAP Writing
 
-Settings are persisted to SPIFFS as JSON:
+Double-buffered writer for packet captures. Uses PSRAM-allocated buffers (`BUF_SIZE = 8KB`).
 
-- **Storage backend:** SPIFFS (`/settings.json`). Initialized with `SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)` — auto-formats on first boot.
-- **JSON format:** ArduinoJson `DynamicJsonDocument` with `JSON_SETTING_SIZE = 2048`. Each setting has `name`, `type`, `value`, and `range` (min/max) fields.
-- **Default settings:** `createDefaultSettings()` writes 8 defaults:
-  - `ForcePMKID` (bool, false)
-  - `ForceProbe` (bool, false)
-  - `SavePCAP` (bool, true) — controls PCAP buffer writing
-  - `EnableLED` (bool, true)
-  - `EPDeauth` (bool, false)
-  - `ChanHop` (bool, false)
-  - `ClientSSID` (String, "")
-  - `ClientPW` (String, "")
-- **Load:** Template-specialized `loadSetting<T>()` for `bool`, `int`, `uint8_t`, `String`. Iterates JSON array to find by name. Auto-creates missing settings.
-- **Save:** `saveSetting<bool>()` writes updated JSON back to SPIFFS file and updates in-memory string. `toggleSetting()` flips bool values.
-- **In-memory cache:** `json_settings_string` holds the serialized JSON to avoid repeated file reads.
+**PCAP file format** (standard libpcap):
+- Global header: magic `0xa1b2c3d4`, version 2.4, snaplen `SNAP_LEN` (4096), link type 105 (802.11)
+- Per-packet: timestamp (sec + usec from `micros()`), included length, original length, payload
 
-**Status:** Fully functional. Compiles clean.
+**File creation**: Auto-increments filename (`/name_0.pcap`, `/name_1.pcap`, ...).
 
-## Issue #50: SPIFFS Fallback
+**Write modes**:
+- `pcapOpen()` — PCAP with global header
+- `logOpen()` — plain `.log` file (no PCAP header)
+- `gpxOpen()` — `.gpx` file (no PCAP header)
 
-**Architecture:**
+**Save targets**: filesystem (`fs::FS*`) and/or serial (`[BUF/BEGIN]...[BUF/CLOSE]` markers).
 
-The storage design uses a split-responsibility model rather than a unified fallback:
+**Gating**: All writes check `settings_obj.loadSetting<bool>("SavePCAP")`. If false, buffer is disabled.
 
-| Feature | Primary Storage | Fallback |
-|---------|----------------|----------|
-| Settings | SPIFFS (`/settings.json`) | Auto-create defaults on missing/corrupt |
-| PCAP files | SD card (via `Buffer`) | Serial output (`[BUF/BEGIN]`/`[BUF/CLOSE]`) |
-| Evil Portal HTML | SD card | Serial injection (`sethtml=`) |
-| OTA updates | SD card (`/update.bin`) | None (SD required) |
+### WiFiScan PCAP Integration
 
-**SPIFFS partition:** The `default_16MB.csv` partition table includes a 3.375MB SPIFFS partition at offset `0xc90000`. SPIFFS is initialized in `settings_obj.begin()` with `FORMAT_SPIFFS_IF_FAILED = true`.
-
-**SD failure handling:**
-- `SDInterface::initSD()` sets `supported = false` on mount failure. All SD operations check this flag.
-- `Buffer::openFile()` gracefully handles null `fs` pointer — sets `writing = false`, no crash.
-- Evil Portal's `setup()` guards HTML enumeration with `#ifdef HAS_SD` and `sd_obj.supported`.
-- Settings are entirely on SPIFFS, independent of SD availability.
-
-**Key insight:** SPIFFS is always available (auto-formatted) for settings. SD is optional for data capture. When SD is absent, PCAP data routes to serial and Evil Portal requires serial HTML injection. This is the upstream Marauder design — no code changes needed.
-
-## Build Verification
-
+`WiFiScan.cpp` opens PCAP buffers with:
+```cpp
+buffer_obj.pcapOpen("filename", sd_obj.supported ? &SD : &SPIFFS, true);
 ```
-Platform: espressif32@6.4.0
-Board: esp32-s3-devkitc-1
-Flash: 22.4% (1,469,481 / 6,553,600 bytes)
-RAM:   21.0% (68,960 / 327,680 bytes)
-Result: SUCCESS
+Falls back to SPIFFS when SD is unavailable. Serial output always enabled.
+
+## Settings Persistence (settings.cpp/h)
+
+Uses **SPIFFS** (not SD) for settings via `/settings.json`.
+
+**Format**: JSON with ArduinoJson (`DynamicJsonDocument`, size `JSON_SETTING_SIZE = 2048`):
+```json
+{
+  "Settings": [
+    {"name": "ForcePMKID", "type": "bool", "value": false, "range": {"min": false, "max": true}},
+    {"name": "SavePCAP",   "type": "bool", "value": true,  "range": {"min": false, "max": true}},
+    {"name": "EnableLED",  "type": "bool", "value": true,  "range": {"min": false, "max": true}},
+    {"name": "EPDeauth",   "type": "bool", "value": false, "range": {"min": false, "max": true}},
+    {"name": "ChanHop",    "type": "bool", "value": false, "range": {"min": false, "max": true}},
+    {"name": "ClientSSID", "type": "String", "value": "",  "range": {"min": "", "max": ""}},
+    {"name": "ClientPW",   "type": "String", "value": "",  "range": {"min": "", "max": ""}}
+  ]
+}
 ```
 
-All storage-related libraries resolved:
-- `SPIFFS @ 2.0.0`
-- `SD @ 2.0.0`
-- `FS @ 2.0.0`
-- `ArduinoJson @ 7.4.3`
-- `ESP Async WebServer @ 2.10.4`
+**Auto-create**: Missing settings are appended on first `loadSetting()` call.
+
+**Types supported**: `bool`, `String`, `int`, `uint8_t`.
+
+## Evil Portal HTML Storage
+
+Evil Portal loads HTML templates from **SD card**:
+- On construction, scans SD root for `*.html` files via `sd_obj.listDirToLinkedList()`
+- `setHtml()` reads `target_html_name` (default: `index.html`) from SD
+- Max HTML size: `MAX_HTML_SIZE = 30000` bytes
+- HTML stored in PSRAM (`ps_malloc`)
+- Fallback: HTML can be set via serial (`sethtml=` command)
+
+AP config file: `/ap.config.txt` on SD for auto-configuring portal SSID.
+
+## SPIFFS Fallback Strategy
+
+The upstream codebase uses a dual-storage approach:
+1. **SPIFFS** — always available, used for settings persistence (`/settings.json`)
+2. **SD card** — optional, used for PCAP captures, logs, GPX tracks, Evil Portal HTML, OTA updates
+
+When SD is unavailable (`sd_obj.supported == false`):
+- PCAP/log/GPX writes fall back to SPIFFS: `sd_obj.supported ? &SD : &SPIFFS`
+- Evil Portal HTML must come from serial instead
+- OTA updates from SD are unavailable
+- Settings continue to work (SPIFFS-only)
+
+## Compilation Status (Issue #46)
+
+**Result: COMPILES SUCCESSFULLY** ✅
+
+```
+RAM:   [==        ]  21.0% (used 68928 bytes from 327680 bytes)
+Flash: [==        ]  22.4% (used 1469449 bytes from 6553600 bytes)
+```
+
+Key findings:
+- SD library (`SD @ 2.0.0`) resolves correctly for ESP32-S3
+- `SDInterface.cpp` compiles with `HAS_SD`, `HAS_CYD_TOUCH`, `HAS_SEPARATE_SD` defines
+- The `spiExt` SPI bus is created internally by `SDInterface::initSD()` — no external `SPIClass` needed in `main.cpp`
+- `Buffer.cpp` compiles with PSRAM buffer allocation (`BUF_SIZE = 8KB`, `SNAP_LEN = 4096`)
+- `settings.cpp` compiles with SPIFFS and ArduinoJson
+- `EvilPortal.cpp` compiles with SD HTML loading path
