@@ -89,25 +89,92 @@ During normal operation:
 
 ---
 
-## Phase 2 Validation Checklist
+## Phase 3: WiFi Scan Test Procedures
+
+### WiFi Scan Test Mode (Issue #36)
+
+**Entry:** Hold ENTER + BACK simultaneously during boot.
+
+**Priority:** This combo is checked first, before single-button test modes.
+
+**What it tests:**
+1. `WiFi.scanNetworks()` — synchronous scan for all APs (including hidden)
+2. Result display — SSID, RSSI, channel, encryption type
+3. Channel hopping — `esp_wifi_set_channel()` on channels 1, 6, 11
+4. Scan performance — elapsed time in milliseconds
+
+**Screen layout:**
+- Title: "WiFi Scan Test"
+- Summary: "Found N APs in Xms"
+- Channel hop status: OK / FAIL
+- AP list (color-coded by signal strength):
+  - Green: > -50 dBm (excellent)
+  - Yellow: -50 to -70 dBm (good)
+  - Orange: -70 to -85 dBm (fair)
+  - Red: < -85 dBm (weak)
+- Each row: `RSSIdBm chNN ENC   SSID`
+
+**Expected serial output:**
+```
+[WiFiTest] Starting scan...
+[WiFiTest] Found N APs in Xms
+[WiFiTest] Chan hop: OK
+[WiFiTest] -42dBm ch06 WPA2  MyNetwork
+[WiFiTest] Done. N APs, Xms, hop=OK
+```
+
+**Exit:** Hold BACK button. WiFi is turned off on exit.
+
+### Marauder Menu WiFi Scan (Issue #36)
+
+The upstream Marauder menu system provides WiFi scanning via:
+**WiFi → Scan APs**
+
+**Procedure:**
+1. Boot normally (no buttons held)
+2. Navigate: WiFi → Scan APs (use encoder or touch)
+3. Scan starts — APs appear on screen in real-time
+4. Press BACK to stop scan
+5. Verify AP list shows SSID, RSSI, channel info
+6. Navigate: WiFi → Select APs — verify scanned APs are selectable
+
+**What to verify:**
+- Scan starts without crash
+- APs populate on screen
+- BACK button stops the scan
+- Returning to menu works cleanly
+- Re-scanning works (no stale state)
+
+### Boot Test Mode Priority
+
+| Priority | Hold during boot | Test mode | Exit method |
+|----------|------------------|-----------|-------------|
+| 1 | **ENTER + BACK** | WiFi scan test | Hold BACK |
+| 2 | **BOOT** (GPIO 0) | Full input validation | Hold BOOT + BACK |
+| 3 | **BACK** (GPIO 39) | Encoder-only test | Hold ENTER |
+| 4 | **ENTER** (GPIO 38) | Touch-only test | Hold BACK |
+
+---
+
+## Phase 3 Validation Checklist
 
 | # | Test | Pass? |
 |---|------|-------|
 | 1 | `pio run -e bsideskc-badge` compiles clean | |
-| 2 | Display shows boot splash on power-up | |
-| 3 | Backlight turns on after splash | |
-| 4 | BOOT short-press cycles backlight | |
-| 5 | Backlight level persists after reboot | |
-| 6 | Touch test mode: dots drawn at touch points | |
-| 7 | Touch coordinates correct (not inverted/mirrored) | |
-| 8 | ENTER button navigates menus | |
-| 9 | BACK button goes back in menus | |
-| 10 | Encoder CW scrolls menu down | |
-| 11 | Encoder CCW scrolls menu up | |
-| 12 | Encoder button selects menu item | |
-| 13 | Full validation test: 7/7 inputs pass | |
-| 14 | Menu wraps correctly at top/bottom | |
-| 15 | Serial output shows all input events | |
+| 2 | WiFi scan test mode enters (ENTER+BACK at boot) | |
+| 3 | WiFi.scanNetworks() finds nearby APs | |
+| 4 | Scan results display SSID, RSSI, channel, encryption | |
+| 5 | Signal strength color coding works | |
+| 6 | Channel hopping reports OK | |
+| 7 | Scan completes in reasonable time (<5s) | |
+| 8 | BACK button exits test mode cleanly | |
+| 9 | WiFi turned off after test mode exit | |
+| 10 | Marauder menu: WiFi → Scan APs starts scan | |
+| 11 | Marauder menu: BACK stops scan | |
+| 12 | Marauder menu: Select APs shows scanned results | |
+| 13 | Serial output shows all scan events | |
+| 14 | No crash on repeated scans | |
+| 15 | Hidden networks shown as "(hidden)" | |
 
 ---
 
@@ -121,7 +188,7 @@ During normal operation:
 | Button navigation | 2 | ✅ |
 | Rotary encoder | 2 | ✅ |
 | Input validation test | 2 | ✅ |
-| WiFi scan | 3 | |
+| WiFi scan | 3 | ✅ |
 | Packet monitor | 3 | |
 | Deauth | 3 | |
 | Beacon spam | 3 | |
