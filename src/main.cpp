@@ -37,8 +37,11 @@
 #endif
 
 #include "hardware/encoder_handler.h"
+#include "hardware/buzzer.h"
+#include "hardware/battery_monitor.h"
 #include "hardware/input_test.h"
 #include "hardware/wifi_scan_test.h"
+#include "hardware/led_feedback.h"
 
 // ---- Upstream global objects (must match esp32_marauder.ino externs) ----
 WiFiScan wifi_scan_obj;
@@ -215,6 +218,9 @@ void setup() {
   encoder_init();
   Serial.println(F("[BSidesKC] Rotary encoder initialized"));
 
+  // Initialize buzzer (GPIO 19)
+  buzzerInit();
+
   // WiFi scan test: hold ENTER + BACK during boot (check combo FIRST)
   #if defined(HAS_SCREEN) && defined(HAS_BUTTONS)
   if (digitalRead(C_BTN) == LOW && digitalRead(D_BTN) == LOW) {
@@ -285,11 +291,15 @@ void setup() {
   #ifdef HAS_BATTERY
     battery_obj.RunSetup();
     battery_obj.battery_level = battery_obj.getBatteryLevel();
+    batteryMonitorInit();
   #endif
 
   #ifdef HAS_NEOPIXEL_LED
     led_obj.RunSetup();
   #endif
+
+  // Badge NeoPixel feedback (6× ring + status LED)
+  led_feedback_init();
 
   #ifdef HAS_GPS
     gps_obj.begin();
@@ -320,6 +330,7 @@ void loop() {
 
   #ifdef HAS_BATTERY
     battery_obj.main(currentTime);
+    batteryMonitorUpdate(currentTime);
   #endif
 
   #ifdef HAS_SCREEN
@@ -355,6 +366,7 @@ void loop() {
     }
 
     if (encoder_button_pressed() && inMenu) {
+      buzzerPlay(TONE_BUTTON_PRESS);
       Menu* m = menu_function_obj.current_menu;
       if (m->list->size() > 0) {
         MenuNode node = m->list->get(m->selected);
@@ -369,10 +381,33 @@ void loop() {
   {
     ButtonEvent evt = buttonBootPoll();
     if (evt == BTN_EVT_RELEASE) {
+      buzzerPlay(TONE_BUTTON_PRESS);
       brightnessCycle();
     }
   }
   #endif
+
+  // Advance async buzzer patterns
+  buzzerUpdate();
+
+  // Sync badge LED feedback with Marauder scan state
+  {
+    uint8_t mode = wifi_scan_obj.currentScanMode;
+    if (mode == WIFI_SCAN_OFF || mode == WIFI_CONNECTED ||
+        mode == OTA_UPDATE || mode == SHOW_INFO || mode == ESP_UPDATE)
+      led_feedback_set(LED_IDLE);
+    else if (mode <= BT_SCAN_SKIMMERS || mode == WIFI_SCAN_ESPRESSIF ||
+             mode == WIFI_SCAN_TARGET_AP || mode == WIFI_SCAN_TARGET_AP_FULL ||
+             mode == WIFI_SCAN_STATION || mode == WIFI_SCAN_SIG_STREN ||
+             mode == WIFI_SCAN_GPS_DATA || mode == WIFI_SCAN_WAR_DRIVE ||
+             mode == BT_SCAN_WAR_DRIVE || mode == BT_SCAN_AIRTAG ||
+             mode == BT_SCAN_FLIPPER || mode == WIFI_SCAN_CHAN_ANALYZER ||
+             mode == BT_SCAN_ANALYZER || mode == WIFI_SCAN_PINESCAN)
+      led_feedback_set(LED_SCANNING);
+    else
+      led_feedback_set(LED_ATTACK);
+  }
+  led_feedback_update();
 
   #ifdef HAS_NEOPIXEL_LED
     led_obj.main(currentTime);
