@@ -1,10 +1,10 @@
 // BSidesKC Badge - ESP32Marauder Port
-// Phase 1.5: Upstream source integration — prove we can compile & link
+// Phase 2: Display & Input — uses DisplayAdapter for badge-specific backlight
 
 #include <Arduino.h>
 #include "configs.h"  // our shim → marauder_config.h
 
-// Pull in upstream Marauder headers to prove linkage
+// Pull in upstream Marauder headers
 #include "WiFiScan.h"
 #include "CommandLine.h"
 #include "Buffer.h"
@@ -16,6 +16,7 @@
 #ifdef HAS_SCREEN
   #include "Display.h"
   #include "MenuFunctions.h"
+  #include "hardware/display_adapter.h"
 #endif
 
 #ifdef HAS_SD
@@ -29,6 +30,13 @@
 #ifdef HAS_BATTERY
   #include "BatteryInterface.h"
 #endif
+
+#ifdef HAS_BUTTONS
+  #include "Switches.h"
+  #include "hardware/button_handler.h"
+#endif
+
+#include "hardware/encoder_handler.h"
 
 // ---- Upstream global objects (must match esp32_marauder.ino externs) ----
 WiFiScan wifi_scan_obj;
@@ -50,61 +58,46 @@ CommandLine cli_obj;
   MenuFunctions menu_function_obj;
 #endif
 
+#ifdef HAS_BUTTONS
+  #if (C_BTN >= 0)
+    Switches c_btn = Switches(C_BTN, 1000, C_PULL);
+  #endif
+  #if (D_BTN >= 0)
+    Switches d_btn = Switches(D_BTN, 1000, D_PULL);
+  #endif
+#endif
+
 #ifdef HAS_NEOPIXEL_LED
   LedInterface led_obj;
   Adafruit_NeoPixel strip = Adafruit_NeoPixel(Pixels, PIN, NEO_GRB + NEO_KHZ800);
 #endif
 
-#ifdef HAS_C5_SD
-  SPIClass sharedSPI(SPI);
-  SDInterface sd_obj = SDInterface(&sharedSPI, SD_CS);
-#elif defined(HAS_SD)
+#ifdef HAS_SEPARATE_SD
+  SPIClass sdSPI(SPI);
+#endif
+
+#ifdef HAS_SD
   SDInterface sd_obj;
 #endif
 
 const String PROGMEM version_number = MARAUDER_VERSION;
 
-// Brightness stubs (upstream .ino defines these, we provide minimal versions)
-#ifdef HAS_SCREEN
-  #include <Preferences.h>
-  #define BL_CHANNEL 0
-  #define BL_FREQ 5000
-  #define BL_RESOLUTION 8
-  const uint8_t BL_LEVELS[] = {26, 51, 77, 102, 128, 153, 179, 204, 230, 255};
-  const uint8_t BL_NUM_LEVELS = 10;
-  uint8_t bl_level_idx = 9;
-  Preferences bl_prefs;
-
-  #if ESP_ARDUINO_VERSION_MAJOR >= 3
-    #define BL_SETUP()   ledcAttach(TFT_BL, BL_FREQ, BL_RESOLUTION)
-    #define BL_SET(duty) ledcWrite(TFT_BL, (duty))
-  #else
-    #define BL_SETUP()   do { ledcSetup(BL_CHANNEL, BL_FREQ, BL_RESOLUTION); ledcAttachPin(TFT_BL, BL_CHANNEL); } while(0)
-    #define BL_SET(duty) ledcWrite(BL_CHANNEL, (duty))
-  #endif
-#endif
-
+// ---- Brightness functions (delegate to DisplayAdapter) ----
 void brightnessInit() {
   #ifdef HAS_SCREEN
-    BL_SETUP();
-    bl_prefs.begin("backlight", false);
-    bl_level_idx = bl_prefs.getUChar("level", 9);
-    if (bl_level_idx >= BL_NUM_LEVELS) bl_level_idx = 9;
-    BL_SET(BL_LEVELS[bl_level_idx]);
+    badge_display.begin();
   #endif
 }
 
 void brightnessCycle() {
   #ifdef HAS_SCREEN
-    bl_level_idx = (bl_level_idx + 1) % BL_NUM_LEVELS;
-    BL_SET(BL_LEVELS[bl_level_idx]);
-    bl_prefs.putUChar("level", bl_level_idx);
+    badge_display.backlightCycle();
   #endif
 }
 
 uint8_t getBrightnessLevel() {
   #ifdef HAS_SCREEN
-    return bl_level_idx;
+    return badge_display.backlightLevel();
   #else
     return 0;
   #endif
@@ -112,24 +105,48 @@ uint8_t getBrightnessLevel() {
 
 void brightnessSave(uint8_t level) {
   #ifdef HAS_SCREEN
-    if (level >= BL_NUM_LEVELS) level = BL_NUM_LEVELS - 1;
-    bl_level_idx = level;
-    BL_SET(BL_LEVELS[bl_level_idx]);
-    bl_prefs.putUChar("level", bl_level_idx);
+    badge_display.backlightSet(level);
+    badge_display.backlightSave();
   #endif
 }
 
 void backlightOn() {
   #ifdef HAS_SCREEN
-    BL_SET(BL_LEVELS[bl_level_idx]);
+    badge_display.backlightOn();
   #endif
 }
 
 void backlightOff() {
   #ifdef HAS_SCREEN
-    BL_SET(0);
+    badge_display.backlightOff();
   #endif
 }
+
+// ---- Touch Test Mode ----
+// Hold BTN_ENTER during boot to enter touch test (draws dots + coords)
+#ifdef HAS_CYD_TOUCH
+void runTouchTest() {
+  display_obj.tft.fillScreen(TFT_BLACK);
+  display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+  display_obj.tft.drawCentreString("Touch Test - tap screen", TFT_WIDTH / 2, 4, 2);
+  display_obj.tft.drawCentreString("Hold BACK to exit", TFT_WIDTH / 2, TFT_HEIGHT - 20, 1);
+
+  while (true) {
+    uint16_t tx, ty;
+    if (display_obj.updateTouch(&tx, &ty)) {
+      display_obj.tft.fillCircle(tx, ty, 3, TFT_CYAN);
+      // Show coords in top-right
+      display_obj.tft.fillRect(TFT_WIDTH - 90, 0, 90, 16, TFT_BLACK);
+      display_obj.tft.setCursor(TFT_WIDTH - 88, 4);
+      display_obj.tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+      display_obj.tft.printf("%d,%d", tx, ty);
+      Serial.printf("[Touch] x=%d y=%d\n", tx, ty);
+    }
+    if (digitalRead(D_BTN) == LOW) break; // BACK button exits
+    delay(10);
+  }
+}
+#endif
 
 uint32_t currentTime = 0;
 
@@ -141,12 +158,6 @@ void setup() {
   while (!Serial) delay(10);
 
   Serial.println(F("[BSidesKC] Booting ESP32 Marauder..."));
-  Serial.println("ESP-IDF version is: " + String(esp_get_idf_version()));
-
-  #ifdef HAS_C5_SD
-    sharedSPI.begin(SD_SCK, SD_MISO, SD_MOSI);
-    delay(100);
-  #endif
 
   #ifdef HAS_SCREEN
     pinMode(TFT_BL, OUTPUT);
@@ -157,7 +168,7 @@ void setup() {
     digitalWrite(TFT_CS, HIGH);
   #endif
 
-  #if defined(HAS_SD) && !defined(HAS_C5_SD)
+  #if defined(HAS_SD)
     pinMode(SD_CS, OUTPUT);
     delay(10);
     digitalWrite(SD_CS, HIGH);
@@ -169,7 +180,6 @@ void setup() {
       Serial.println(F("PSRAM not available"));
   #endif
 
-  // SD init for C5_SD path (before display)
   #ifdef HAS_SIMPLEX_DISPLAY
     #ifdef HAS_SD
       if (!sd_obj.initSD())
@@ -177,11 +187,13 @@ void setup() {
     #endif
   #endif
 
+  // Display init — upstream RunSetup handles tft.init() + rotation + clear
   #ifdef HAS_SCREEN
     display_obj.RunSetup();
     display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
   #endif
 
+  // Badge backlight PWM init (after display so ledcAttach overrides TFT_eSPI's pinMode)
   brightnessInit();
   backlightOff();
 
@@ -192,6 +204,44 @@ void setup() {
   #endif
 
   backlightOn();
+
+  // Initialize badge button handler (BOOT pin; ENTER/BACK handled by Switches)
+  #ifdef HAS_BUTTONS
+    buttonHandlerInit();
+  #endif
+
+  // Initialize rotary encoder (A:45, B:48, Button:20)
+  encoder_init();
+  Serial.println(F("[BSidesKC] Rotary encoder initialized"));
+
+  // Encoder test: hold BACK during boot
+  #ifdef HAS_BUTTONS
+  if (digitalRead(D_BTN) == LOW) {
+    display_obj.tft.fillScreen(TFT_BLACK);
+    display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+    display_obj.tft.drawCentreString("Encoder Test", TFT_WIDTH / 2, 4, 2);
+    display_obj.tft.drawCentreString("Rotate / Press knob", TFT_WIDTH / 2, 30, 1);
+    display_obj.tft.drawCentreString("Hold ENTER to exit", TFT_WIDTH / 2, TFT_HEIGHT - 20, 1);
+    int pos = 0;
+    while (true) {
+      if (encoder_turned_up())   { pos--; Serial.printf("[Enc] UP   pos=%d\n", pos); }
+      if (encoder_turned_down()) { pos++; Serial.printf("[Enc] DOWN pos=%d\n", pos); }
+      if (encoder_button_pressed()) { Serial.println("[Enc] BUTTON"); }
+      display_obj.tft.fillRect(0, 80, TFT_WIDTH, 40, TFT_BLACK);
+      display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
+      display_obj.tft.drawCentreString("Pos: " + String(pos), TFT_WIDTH / 2, 90, 2);
+      if (digitalRead(C_BTN) == LOW) break;
+      delay(50);
+    }
+    display_obj.clearScreen();
+  }
+  #endif
+  #ifdef HAS_CYD_TOUCH
+    if (digitalRead(C_BTN) == LOW) {
+      runTouchTest();
+      display_obj.clearScreen();
+    }
+  #endif
 
   settings_obj.begin();
   buffer_obj = Buffer();
@@ -254,6 +304,54 @@ void loop() {
 
   #ifdef HAS_SCREEN
     menu_function_obj.main(currentTime);
+  #endif
+
+  // ---- Rotary encoder → menu navigation ----
+  #ifdef HAS_SCREEN
+  {
+    bool inMenu = (wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
+                  (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
+                  (wifi_scan_obj.currentScanMode == OTA_UPDATE);
+
+    bool enc_up = encoder_turned_up();
+    bool enc_down = encoder_turned_down();
+
+    if ((enc_up || enc_down) && inMenu) {
+      Menu* m = menu_function_obj.current_menu;
+      int count = m->list->size();
+      if (count > 0) {
+        if (enc_up)
+          m->selected = (m->selected == 0) ? count - 1 : m->selected - 1;
+        else
+          m->selected = (m->selected >= count - 1) ? 0 : m->selected + 1;
+
+        // Compute page start for the new selection
+        int page = 0;
+        if (m->selected >= BUTTON_SCREEN_LIMIT)
+          page = m->selected + 1 - BUTTON_SCREEN_LIMIT;
+        menu_function_obj.buildButtons(m, page);
+        menu_function_obj.displayCurrentMenu(page);
+      }
+    }
+
+    if (encoder_button_pressed() && inMenu) {
+      Menu* m = menu_function_obj.current_menu;
+      if (m->list->size() > 0) {
+        MenuNode node = m->list->get(m->selected);
+        if (node.callable) node.callable();
+      }
+    }
+  }
+  #endif
+
+  // BOOT button: short press cycles backlight
+  #ifdef HAS_BUTTONS
+  {
+    ButtonEvent evt = buttonBootPoll();
+    if (evt == BTN_EVT_RELEASE) {
+      brightnessCycle();
+    }
+  }
   #endif
 
   #ifdef HAS_NEOPIXEL_LED

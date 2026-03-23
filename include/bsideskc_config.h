@@ -16,7 +16,6 @@
 #define HAS_FULL_SCREEN
 #define HAS_TOUCH
 #define HAS_BT
-#define HAS_NIMBLE_2
 #define HAS_IDF_3
 #define HAS_SD
 #define USE_SD
