@@ -1,0 +1,24 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+.piorepo/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+build/
+*.bin
+*.elf
+*.map
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Do NOT ignore esp32marauder-upstream/
