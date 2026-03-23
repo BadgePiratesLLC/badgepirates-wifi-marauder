@@ -2,15 +2,15 @@
 
 ESP32Marauder port for the BSidesKC ESP32-S3 conference badge.
 
-## Status: Phase 1 In Progress
+## Status: Phase 3 Up Next
 
-Phase 1 (Project Setup & Build System) is actively being worked on. Track all progress via [GitHub Issues](https://github.com/BadgePiratesLLC/badgepirates-wifi-marauder/issues).
+Phases 1 & 2 complete. WiFi features (Phase 3) starting next. Track progress via [GitHub Issues](https://github.com/BadgePiratesLLC/badgepirates-wifi-marauder/issues).
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 1 | Project Setup & Build System | 🔄 In Progress |
-| 2 | Display & Input | ⏳ Pending |
-| 3 | WiFi Features | ⏳ Pending |
+| 1 | Project Setup & Build System | ✅ Complete |
+| 2 | Display & Input | ✅ Complete |
+| 3 | WiFi Features (Issues #35-41) | 🔄 Up Next |
 | 4 | BLE Features | ⏳ Pending |
 | 5 | Storage & Persistence | ⏳ Pending |
 | 6 | Badge Integration | ⏳ Pending |
