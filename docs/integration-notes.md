@@ -122,3 +122,67 @@ Hold BACK (GPIO 39) to exit and continue normal boot.
 
 QACode_27's `Screen_Module.cpp` was used as reference for FT6336U I2C init
 and coordinate reading patterns on the same badge hardware.
+
+## Rotary Encoder (Phase 2, Issue #33) — Implemented
+
+### Hardware
+
+The badge has an EC11-style rotary encoder with push button:
+- Pin A (CLK): GPIO 45
+- Pin B (DT):  GPIO 48
+- Button (SW): GPIO 20
+
+Pins defined in `bsideskc_pins.h` as `ENC_A_PIN`, `ENC_B_PIN`, `ENC_BTN_PIN`.
+
+### Library
+
+Uses `ESP32RotaryEncoder` by MaffooClock (v1.1.0), already in `platformio.ini`
+lib_deps. The library handles interrupt-driven encoder reading with debouncing
+via an internal ESP timer.
+
+### Implementation
+
+```
+src/hardware/encoder_handler.h   ← Public API: init, turned_up, turned_down, button_pressed
+src/hardware/encoder_handler.cpp ← ESP32RotaryEncoder wrapper with volatile flags
+```
+
+Pattern follows QACode_27's `RotaryEncoder_Module.cpp`:
+- Encoder bounded to -1/1, value reset to 0 after each turn event
+- ISR callbacks set volatile flags for direction and button press
+- Polling functions consume flags (read-and-clear)
+
+### Menu Integration
+
+Encoder is integrated in `main.cpp` loop, **after** `menu_function_obj.main()`
+runs (so physical buttons and touch still work normally).
+
+The encoder navigation uses only public MenuFunctions methods:
+- `current_menu->selected` — directly updated for selection index
+- `buildButtons(menu, start_index)` — redraws button list from given index
+- `displayCurrentMenu(start_index)` — renders the visible page
+
+This avoids modifying upstream code. The private `buttonSelected()` /
+`buttonNotSelected()` methods are not accessible, so encoder turns trigger a
+full page rebuild via `buildButtons` + `displayCurrentMenu`.
+
+Rotation mapping:
+- CW (clockwise)  → scroll down (increment selected, wrap to 0)
+- CCW (counter-CW) → scroll up (decrement selected, wrap to end)
+- Button press     → execute selected menu item's callable
+
+Navigation only activates when Marauder is in menu mode (`WIFI_SCAN_OFF`,
+`WIFI_CONNECTED`, or `OTA_UPDATE`). During active scans, encoder events are
+ignored (physical ENTER/BACK buttons handle scan stop).
+
+### Encoder Test Mode
+
+Hold the BACK button (GPIO 39) during boot to enter encoder test mode.
+The screen shows a position counter that increments/decrements with rotation.
+Button presses are logged to Serial. Hold ENTER (GPIO 38) to exit and
+continue normal boot.
+
+### Reference
+
+QACode_27's `RotaryEncoder_Module.cpp` was the reference implementation for
+the same badge hardware encoder using the same ESP32RotaryEncoder library.

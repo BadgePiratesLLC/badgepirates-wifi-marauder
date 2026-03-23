@@ -313,66 +313,33 @@ void loop() {
                   (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
                   (wifi_scan_obj.currentScanMode == OTA_UPDATE);
 
-    if (encoder_turned_up() && inMenu) {
-      Menu* m = menu_function_obj.current_menu;
-      if (m->selected > 0) {
-        int prev = m->selected;
-        m->selected--;
-        // Page up if scrolled past visible area
-        int page_start = prev - (prev % BUTTON_SCREEN_LIMIT);
-        if ((int)m->selected < page_start) {
-          menu_function_obj.buildButtons(m, m->selected);
-          menu_function_obj.displayCurrentMenu(m->selected);
-        }
-        menu_function_obj.buttonSelected(m->selected % BUTTON_SCREEN_LIMIT, m->selected);
-        if (!m->list->get(prev).selected)
-          menu_function_obj.buttonNotSelected(prev % BUTTON_SCREEN_LIMIT, prev);
-      } else {
-        // Wrap to end
-        int prev = m->selected;
-        m->selected = m->list->size() - 1;
-        if (m->selected >= BUTTON_SCREEN_LIMIT) {
-          menu_function_obj.buildButtons(m, m->selected + 1 - BUTTON_SCREEN_LIMIT);
-          menu_function_obj.displayCurrentMenu(m->selected + 1 - BUTTON_SCREEN_LIMIT);
-        }
-        menu_function_obj.buttonSelected(m->selected % BUTTON_SCREEN_LIMIT, m->selected);
-        if (!m->list->get(prev).selected)
-          menu_function_obj.buttonNotSelected(prev % BUTTON_SCREEN_LIMIT, prev);
-      }
-    }
+    bool enc_up = encoder_turned_up();
+    bool enc_down = encoder_turned_down();
 
-    if (encoder_turned_down() && inMenu) {
+    if ((enc_up || enc_down) && inMenu) {
       Menu* m = menu_function_obj.current_menu;
-      if (m->selected < m->list->size() - 1) {
-        int prev = m->selected;
-        m->selected++;
-        // Page down if scrolled past visible area
-        int page_start = prev - (prev % BUTTON_SCREEN_LIMIT);
-        if ((int)m->selected >= page_start + BUTTON_SCREEN_LIMIT) {
-          menu_function_obj.buildButtons(m, m->selected + 1 - BUTTON_SCREEN_LIMIT);
-          menu_function_obj.displayCurrentMenu(m->selected + 1 - BUTTON_SCREEN_LIMIT);
-        } else {
-          menu_function_obj.buttonSelected(m->selected % BUTTON_SCREEN_LIMIT, m->selected);
-        }
-        if (!m->list->get(prev).selected)
-          menu_function_obj.buttonNotSelected(prev % BUTTON_SCREEN_LIMIT, prev);
-      } else {
-        // Wrap to beginning
-        m->selected = 0;
-        if (m->list->size() > BUTTON_SCREEN_LIMIT) {
-          menu_function_obj.buildButtons(m);
-          menu_function_obj.displayCurrentMenu();
-        }
-        menu_function_obj.buttonSelected(0, 0);
-        if (!m->list->get(m->list->size() - 1).selected)
-          menu_function_obj.buttonNotSelected((m->list->size() - 1) % BUTTON_SCREEN_LIMIT, m->list->size() - 1);
+      int count = m->list->size();
+      if (count > 0) {
+        if (enc_up)
+          m->selected = (m->selected == 0) ? count - 1 : m->selected - 1;
+        else
+          m->selected = (m->selected >= count - 1) ? 0 : m->selected + 1;
+
+        // Compute page start for the new selection
+        int page = 0;
+        if (m->selected >= BUTTON_SCREEN_LIMIT)
+          page = m->selected + 1 - BUTTON_SCREEN_LIMIT;
+        menu_function_obj.buildButtons(m, page);
+        menu_function_obj.displayCurrentMenu(page);
       }
     }
 
     if (encoder_button_pressed() && inMenu) {
       Menu* m = menu_function_obj.current_menu;
-      MenuNode node = m->list->get(m->selected);
-      if (node.callable) node.callable();
+      if (m->list->size() > 0) {
+        MenuNode node = m->list->get(m->selected);
+        if (node.callable) node.callable();
+      }
     }
   }
   #endif
