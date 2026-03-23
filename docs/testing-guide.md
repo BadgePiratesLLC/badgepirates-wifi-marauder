@@ -295,6 +295,136 @@ All upstream WiFi attack features compile for ESP32-S3. Hardware testing is requ
 
 ---
 
+## Phase 4: BLE Test Procedures
+
+### BLE Scan Test (Issue #43)
+
+**Menu path:** Bluetooth → BLE Scan (or `btscan` via CLI)
+
+**Procedure:**
+1. Boot normally, navigate to Bluetooth → BLE Scan
+2. Verify scan starts — nearby BLE devices appear on screen
+3. Check serial output for device addresses, RSSI, and names
+4. Press BACK to stop scan
+5. Verify clean return to menu
+
+**What to verify on hardware:**
+- NimBLE scan initializes without crash
+- Devices discovered with correct addresses and RSSI
+- Scan stops cleanly on BACK press
+- Re-scanning works (no stale state)
+- Memory stable after repeated scans
+
+### BLE Skimmer Detection Test (Issue #44)
+
+**Menu path:** Bluetooth → Skimmer Detect (or `btscan -t skimmer` via CLI)
+
+**Procedure:**
+1. Navigate to Bluetooth → Skimmer Detect
+2. Scan runs and filters for known skimmer signatures
+3. Verify serial output shows payload pattern matching
+4. If a known skimmer device is available, verify detection alert
+5. Press BACK to stop
+
+**What to verify on hardware:**
+- Skimmer signature matching against BLE advertisement payloads
+- Alert display when skimmer-like device found
+- No false positives on common consumer BLE devices
+- Clean stop and return to menu
+
+### BLE Spam Attack Tests (Issue #45)
+
+**Menu path:** Bluetooth → BLE Spam → (select type)
+
+| Spam Type | Target | CLI Command |
+|-----------|--------|-------------|
+| Sour Apple | Apple devices (popup spam) | `blespam -t apple` |
+| SwiftPair | Windows devices | `blespam -t windows` |
+| Samsung | Samsung devices | `blespam -t samsung` |
+| Google Fast Pair | Android devices | `blespam -t google` |
+| Flipper | Flipper Zero | `blespam -t flipper` |
+| Spam All | All of the above | `blespam -t all` |
+
+**Procedure:**
+1. Select a spam type from the menu
+2. Verify serial output shows advertisement construction and transmission
+3. Use a target device (phone/laptop) to verify spam popups appear
+4. Press BACK to stop
+5. Verify advertising stops and menu returns cleanly
+
+**What to verify on hardware:**
+- BLE advertisements transmit successfully
+- Target devices receive and display spam notifications
+- Attack stops immediately on BACK press
+- No crash on repeated start/stop cycles
+- WiFi still functional after BLE spam (coexistence)
+
+### AirTag Scan/Spoof Tests (Issues #43, #45)
+
+**AirTag Scan — Menu path:** Bluetooth → AirTag Scan
+
+**Procedure:**
+1. Start AirTag scan with a real AirTag nearby
+2. Verify detection and Apple continuity protocol parsing
+3. Check serial output for AirTag-specific data
+
+**AirTag Spoof — Menu path:** Bluetooth → Spoof AirTag (or `spoofat` via CLI)
+
+**Procedure:**
+1. Start AirTag spoof
+2. Use an Apple device to check if spoofed AirTag appears in Find My
+3. Press BACK to stop
+
+### Phase 4 BLE Compile Checklist
+
+| # | Test | Pass? |
+|---|------|-------|
+| 1 | `pio run -e bsideskc-badge` compiles with BLE enabled | ✅ |
+| 2 | NimBLE 1.4.3 links successfully for ESP32-S3 | ✅ |
+| 3 | BLE scan code compiles (`WiFiScan::RunBleScan`) | ✅ |
+| 4 | Skimmer detect compiles (`BT_SCAN_SKIMMERS` path) | ✅ |
+| 5 | AirTag scan compiles (`BT_SCAN_AIRTAG` path) | ✅ |
+| 6 | Flipper scan compiles (`BT_SCAN_FLIPPER` path) | ✅ |
+| 7 | Sour Apple compiles (`BT_ATTACK_SOUR_APPLE` path) | ✅ |
+| 8 | SwiftPair spam compiles (`BT_ATTACK_SWIFTPAIR_SPAM`) | ✅ |
+| 9 | Samsung spam compiles (`BT_ATTACK_SAMSUNG_SPAM`) | ✅ |
+| 10 | Google spam compiles (`BT_ATTACK_GOOGLE_SPAM`) | ✅ |
+| 11 | Flipper spam compiles (`BT_ATTACK_FLIPPER_SPAM`) | ✅ |
+| 12 | AirTag spoof compiles (`BT_SPOOF_AIRTAG`) | ✅ |
+| 13 | Full build succeeds with zero BLE errors | ✅ |
+
+### Phase 4 Hardware Test Checklist (Pending)
+
+| # | Test | Pass? |
+|---|------|-------|
+| 1 | BLE scan discovers nearby devices | |
+| 2 | Device names and RSSI displayed correctly | |
+| 3 | Skimmer detection filters correctly | |
+| 4 | AirTag detected when nearby | |
+| 5 | BLE spam popups appear on target device | |
+| 6 | AirTag spoof visible in Find My | |
+| 7 | BLE + WiFi coexistence stable | |
+| 8 | Memory stable under BLE scan load | |
+| 9 | Repeated scan start/stop without crash | |
+| 10 | BACK button stops all BLE operations cleanly | |
+
+---
+
+## BLE Feature Testing — Responsible Use
+
+> **BLE spam and spoofing features are intended for authorized security
+> research and education only.**
+
+### Legal and Ethical Requirements
+
+- Only test BLE spam attacks in controlled environments you own
+- Do not use BLE spam in public spaces — it affects all nearby devices
+- AirTag spoofing may violate Apple's terms of service
+- Comply with all applicable wireless communication laws
+- Use an RF-shielded environment when possible
+
+---
+
 ## Feature Regression Matrix
 
 | Feature | Phase | Status |
@@ -311,8 +441,11 @@ All upstream WiFi attack features compile for ESP32-S3. Hardware testing is requ
 | Beacon spam | 3 | ✅ compile-verified |
 | PMKID capture | 3 | ✅ compile-verified |
 | Evil Portal | 3 | ✅ compile-verified |
-| BLE scan | 4 | |
-| BLE skimmer detect | 4 | |
+| BLE scan | 4 | ✅ compile-verified |
+| BLE skimmer detect | 4 | ✅ compile-verified |
+| BLE spam attacks | 4 | ✅ compile-verified |
+| AirTag scan/spoof | 4 | ✅ compile-verified |
+| Flipper/Flock detect | 4 | ✅ compile-verified |
 | SD PCAP save | 5 | |
 | Settings persist | 5 | |
 | NeoPixel feedback | 6 | |

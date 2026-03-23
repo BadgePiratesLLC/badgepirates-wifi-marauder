@@ -2,24 +2,24 @@
 
 ESP32Marauder port for the BSidesKC ESP32-S3 conference badge.
 
-## Status: Phase 3 Complete
+## Status: Phase 4 Complete
 
-Phase 3 (WiFi Features) is complete — all upstream WiFi attack features compile successfully for ESP32-S3. Hardware runtime testing deferred to when badges are available.
+Phase 4 (BLE Features) is complete — all upstream BLE features compile successfully for ESP32-S3 using NimBLE 1.4.3. Hardware runtime testing deferred to when badges are available.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Project Setup & Build System | ✅ Complete |
 | 2 | Display & Input | ✅ Complete |
 | 3 | WiFi Features | ✅ Complete (compile-verified) |
-| 4 | BLE Features | 🔄 Next |
-| 5 | Storage & Persistence | ⏳ Pending |
+| 4 | BLE Features | ✅ Complete (compile-verified) |
+| 5 | Storage & Persistence | 🔄 Next |
 | 6 | Badge Integration | ⏳ Pending |
 | 7 | Testing & Polish | ⏳ Pending |
 
-### Phase 3 Highlights
-- ESP32-S3 promiscuous mode fully supported (identical API to ESP32)
-- All WiFi features compile: scanning, packet monitor, deauth, beacon spam, PMKID capture, Evil Portal
-- WiFi scan test mode added (ENTER+BACK at boot)
+### Phase 4 Highlights
+- NimBLE 1.4.3 fully compatible with ESP32-S3 (no upgrade to 2.x needed)
+- ESP32-S3 BLE 5.0 support confirmed (2M PHY, Coded PHY, extended advertising available)
+- All BLE features compile: scanning, skimmer detect, AirTag scan/spoof, BLE spam (Apple/Samsung/Google/Windows/Flipper)
 - Zero upstream modifications maintained
 - Build: 21.0% RAM, 22.4% Flash
 
@@ -52,8 +52,10 @@ See the [`docs/`](docs/) directory for detailed documentation:
 - [Phase 1 Summary](docs/phase1-summary.md) — Build system and project setup
 - [Phase 2 Summary](docs/phase2-summary.md) — Display and input integration
 - [Phase 3 Summary](docs/phase3-summary.md) — WiFi feature verification
+- [Phase 4 Summary](docs/phase4-summary.md) — BLE feature verification
 - [Testing Guide](docs/testing-guide.md) — Test procedures for all phases
 - [WiFi Implementation Notes](docs/wifi-implementation-notes.md) — ESP32-S3 WiFi analysis
+- [BLE Implementation Notes](docs/ble-implementation-notes.md) — ESP32-S3 BLE/NimBLE analysis
 
 ## Based On
 - [ESP32Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
