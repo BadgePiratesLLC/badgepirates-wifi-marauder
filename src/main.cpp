@@ -33,7 +33,10 @@
 
 #ifdef HAS_BUTTONS
   #include "Switches.h"
+  #include "hardware/button_handler.h"
 #endif
+
+#include "hardware/encoder_handler.h"
 
 // ---- Upstream global objects (must match esp32_marauder.ino externs) ----
 WiFiScan wifi_scan_obj;
@@ -202,10 +205,38 @@ void setup() {
 
   backlightOn();
 
-  // Touch test: hold ENTER during boot
+  // Initialize badge button handler (BOOT pin; ENTER/BACK handled by Switches)
+  #ifdef HAS_BUTTONS
+    buttonHandlerInit();
+  #endif
+
+  // Initialize rotary encoder (A:45, B:48, Button:20)
+  encoder_init();
+  Serial.println(F("[BSidesKC] Rotary encoder initialized"));
+
+  // Encoder test: hold BACK during boot
+  #ifdef HAS_BUTTONS
+  if (digitalRead(D_BTN) == LOW) {
+    display_obj.tft.fillScreen(TFT_BLACK);
+    display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+    display_obj.tft.drawCentreString("Encoder Test", TFT_WIDTH / 2, 4, 2);
+    display_obj.tft.drawCentreString("Rotate / Press knob", TFT_WIDTH / 2, 30, 1);
+    display_obj.tft.drawCentreString("Hold ENTER to exit", TFT_WIDTH / 2, TFT_HEIGHT - 20, 1);
+    int pos = 0;
+    while (true) {
+      if (encoder_turned_up())   { pos--; Serial.printf("[Enc] UP   pos=%d\n", pos); }
+      if (encoder_turned_down()) { pos++; Serial.printf("[Enc] DOWN pos=%d\n", pos); }
+      if (encoder_button_pressed()) { Serial.println("[Enc] BUTTON"); }
+      display_obj.tft.fillRect(0, 80, TFT_WIDTH, 40, TFT_BLACK);
+      display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
+      display_obj.tft.drawCentreString("Pos: " + String(pos), TFT_WIDTH / 2, 90, 2);
+      if (digitalRead(C_BTN) == LOW) break;
+      delay(50);
+    }
+    display_obj.clearScreen();
+  }
+  #endif
   #ifdef HAS_CYD_TOUCH
-    pinMode(C_BTN, INPUT_PULLUP);
-    pinMode(D_BTN, INPUT_PULLUP);
     if (digitalRead(C_BTN) == LOW) {
       runTouchTest();
       display_obj.clearScreen();
@@ -273,6 +304,87 @@ void loop() {
 
   #ifdef HAS_SCREEN
     menu_function_obj.main(currentTime);
+  #endif
+
+  // ---- Rotary encoder → menu navigation ----
+  #ifdef HAS_SCREEN
+  {
+    bool inMenu = (wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
+                  (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
+                  (wifi_scan_obj.currentScanMode == OTA_UPDATE);
+
+    if (encoder_turned_up() && inMenu) {
+      Menu* m = menu_function_obj.current_menu;
+      if (m->selected > 0) {
+        int prev = m->selected;
+        m->selected--;
+        // Page up if scrolled past visible area
+        int page_start = prev - (prev % BUTTON_SCREEN_LIMIT);
+        if ((int)m->selected < page_start) {
+          menu_function_obj.buildButtons(m, m->selected);
+          menu_function_obj.displayCurrentMenu(m->selected);
+        }
+        menu_function_obj.buttonSelected(m->selected % BUTTON_SCREEN_LIMIT, m->selected);
+        if (!m->list->get(prev).selected)
+          menu_function_obj.buttonNotSelected(prev % BUTTON_SCREEN_LIMIT, prev);
+      } else {
+        // Wrap to end
+        int prev = m->selected;
+        m->selected = m->list->size() - 1;
+        if (m->selected >= BUTTON_SCREEN_LIMIT) {
+          menu_function_obj.buildButtons(m, m->selected + 1 - BUTTON_SCREEN_LIMIT);
+          menu_function_obj.displayCurrentMenu(m->selected + 1 - BUTTON_SCREEN_LIMIT);
+        }
+        menu_function_obj.buttonSelected(m->selected % BUTTON_SCREEN_LIMIT, m->selected);
+        if (!m->list->get(prev).selected)
+          menu_function_obj.buttonNotSelected(prev % BUTTON_SCREEN_LIMIT, prev);
+      }
+    }
+
+    if (encoder_turned_down() && inMenu) {
+      Menu* m = menu_function_obj.current_menu;
+      if (m->selected < m->list->size() - 1) {
+        int prev = m->selected;
+        m->selected++;
+        // Page down if scrolled past visible area
+        int page_start = prev - (prev % BUTTON_SCREEN_LIMIT);
+        if ((int)m->selected >= page_start + BUTTON_SCREEN_LIMIT) {
+          menu_function_obj.buildButtons(m, m->selected + 1 - BUTTON_SCREEN_LIMIT);
+          menu_function_obj.displayCurrentMenu(m->selected + 1 - BUTTON_SCREEN_LIMIT);
+        } else {
+          menu_function_obj.buttonSelected(m->selected % BUTTON_SCREEN_LIMIT, m->selected);
+        }
+        if (!m->list->get(prev).selected)
+          menu_function_obj.buttonNotSelected(prev % BUTTON_SCREEN_LIMIT, prev);
+      } else {
+        // Wrap to beginning
+        m->selected = 0;
+        if (m->list->size() > BUTTON_SCREEN_LIMIT) {
+          menu_function_obj.buildButtons(m);
+          menu_function_obj.displayCurrentMenu();
+        }
+        menu_function_obj.buttonSelected(0, 0);
+        if (!m->list->get(m->list->size() - 1).selected)
+          menu_function_obj.buttonNotSelected((m->list->size() - 1) % BUTTON_SCREEN_LIMIT, m->list->size() - 1);
+      }
+    }
+
+    if (encoder_button_pressed() && inMenu) {
+      Menu* m = menu_function_obj.current_menu;
+      MenuNode node = m->list->get(m->selected);
+      if (node.callable) node.callable();
+    }
+  }
+  #endif
+
+  // BOOT button: short press cycles backlight
+  #ifdef HAS_BUTTONS
+  {
+    ButtonEvent evt = buttonBootPoll();
+    if (evt == BTN_EVT_RELEASE) {
+      brightnessCycle();
+    }
+  }
   #endif
 
   #ifdef HAS_NEOPIXEL_LED
