@@ -32,12 +32,12 @@ V8 was chosen because it's the closest match:
 
 | Area | V8 | BSidesKC Badge | Reason |
 |------|-----|----------------|--------|
-| Touch | XPT2046 (SPI resistive) | FT6336U (I2C capacitive) | Badge hardware. TOUCH_CS set to -1; adapter needed |
+| Touch | XPT2046 (SPI resistive) | FT6336U (I2C capacitive) | Badge hardware. Shimmed via `HAS_CYD_TOUCH` path |
 | Dual-band | HAS_DUAL_BAND | Omitted | Badge ESP32-S3 is single-band 2.4 GHz |
 | NeoPixel | Not enabled | HAS_NEOPIXEL_LED (6 LEDs) | Badge has onboard NeoPixels |
 | Buttons | Touch-only (no HAS_BUTTONS) | HAS_BUTTONS + rotary encoder | Badge has physical buttons |
 | Display SPI pins | V8 uses TFT_eSPI defaults | Explicit TFT_MOSI=11, TFT_SCLK=12, etc. | Badge PCB routing |
-| SD SPI bus | Shared via HAS_C5_SD | Dedicated bus (pins 35/36/37/47) | Badge has separate SD SPI |
+| SD SPI bus | HAS_C5_SD (shared SPI) | HAS_SEPARATE_SD + HAS_CYD_TOUCH path | CYD SD path avoids C5_SD/CYD_TOUCH conflict in SDInterface |
 | GPS pins | TX=14, RX=13 | Same defaults (TBD on badge) | Confirm when GPS header wired |
 | Battery I2C | SCL=4, SDA=5 | SCL=9, SDA=8 (shared touch bus) | MAX17048 on same I2C as FT6336U |
 
@@ -63,8 +63,62 @@ V8 was chosen because it's the closest match:
 5. **Never edit upstream files directly.** All badge customization lives in
    `include/` and `src/`. This keeps `git submodule update` clean.
 
-## Touch Adapter (Phase 2)
+## Touch Adapter (Phase 2) — Implemented
 
-Marauder expects XPT2046-style SPI touch via TFT_eSPI. The badge uses FT6336U
-I2C capacitive touch. A shim class will be needed to provide the same
-`x, y, pressed` interface. This is tracked separately from the config layer.
+### Problem
+
+Marauder expects XPT2046 SPI resistive touch. The badge uses FT6336U I2C
+capacitive touch (SDA:8, SCL:9, RST:3, INT:7). These are completely different
+hardware interfaces.
+
+### Solution: XPT2046 Shim via `HAS_CYD_TOUCH`
+
+Rather than modifying upstream Display.cpp, we exploit the existing
+`HAS_CYD_TOUCH` code path. Upstream's CYD touch path uses an
+`XPT2046_Touchscreen` object with methods `tirqTouched()`, `touched()`,
+`getPoint()`, `begin()`, and `setRotation()`.
+
+We provide a drop-in replacement:
+
+```
+include/XPT2046_Touchscreen.h   ← Shadows the real XPT2046 library header.
+                                    Defines TS_Point struct and
+                                    XPT2046_Touchscreen class backed by FT6336U.
+src/hardware/touch_adapter.h     ← FT6336U init + global accessor
+src/hardware/touch_adapter.cpp   ← FT6336U instance (pins from bsideskc_pins.h)
+```
+
+### How It Works
+
+1. `marauder_config.h` defines `HAS_CYD_TOUCH` + dummy XPT2046 pin values.
+2. Upstream `Display.h` does `#include <XPT2046_Touchscreen.h>` — our
+   `include/` directory is first in the search path, so our shim is used.
+3. Our shim class wraps FT6336U reads and scales raw 0-239/0-319 coordinates
+   to the 200-3700/240-3800 ADC range that Display.cpp's `map()` calls expect.
+4. Upstream `Display::updateTouch()` works unmodified — it calls our shim's
+   `tirqTouched()`, `touched()`, `getPoint()` and gets correct screen coords.
+
+### Coordinate Mapping
+
+FT6336U returns portrait coordinates (0-239 X, 0-319 Y). The shim scales
+these to match the resistive ADC range. Display.cpp's rotation-aware `map()`
+then converts to screen coordinates for the current TFT rotation.
+
+### SD Card Interaction
+
+Defining `HAS_CYD_TOUCH` conflicts with `HAS_C5_SD` in upstream SDInterface.h
+(they use `#elif`). The badge now uses `HAS_SEPARATE_SD` instead, which is the
+CYD-compatible path for a dedicated SD SPI bus. The SD init in SDInterface.cpp
+uses the `HAS_CYD_TOUCH || HAS_SEPARATE_SD` branch with `SD_SCK`/`SD_MISO`/
+`SD_MOSI`/`SD_CS` pins from `marauder_config.h`.
+
+### Touch Test Mode
+
+Hold the ENTER button (GPIO 38) during boot to enter touch test mode. This
+draws cyan dots where you touch and shows coordinates in the top-right corner.
+Hold BACK (GPIO 39) to exit and continue normal boot.
+
+### Reference
+
+QACode_27's `Screen_Module.cpp` was used as reference for FT6336U I2C init
+and coordinate reading patterns on the same badge hardware.
