@@ -183,6 +183,7 @@ correct ESP32-S3 compatibility for:
 
 - [x] Verify promiscuous mode support (Issue #35) — **CONFIRMED**
 - [x] Verify WiFiScan.cpp compiles for ESP32-S3 — **CONFIRMED**
+- [x] WiFi scan test mode added (ENTER+BACK boot combo)
 - [ ] Runtime test: AP scanning on hardware
 - [ ] Runtime test: Promiscuous mode packet capture
 - [ ] Runtime test: Channel hopping
