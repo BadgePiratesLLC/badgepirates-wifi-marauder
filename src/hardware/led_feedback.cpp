@@ -3,6 +3,7 @@
 
 static Adafruit_NeoPixel pixels(NEOPIXEL_COUNT, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 static Adafruit_NeoPixel statusLed(STATUS_LED_COUNT, STATUS_LED_PIN, NEO_GRB + NEO_KHZ800);
+static uint8_t ledBrightness = 33;
 
 static LedState currentState = LED_IDLE;
 static LedState prevState = LED_IDLE;
@@ -97,4 +98,14 @@ void led_feedback_update() {
 
     pixels.show();
     statusLed.show();
+}
+
+void led_feedback_set_brightness(uint8_t brightness) {
+    ledBrightness = brightness;
+    pixels.setBrightness(brightness);
+    statusLed.setBrightness(brightness);
+}
+
+uint8_t led_feedback_get_brightness() {
+    return ledBrightness;
 }

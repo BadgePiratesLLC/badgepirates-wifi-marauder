@@ -451,8 +451,12 @@ All upstream WiFi attack features compile for ESP32-S3. Hardware testing is requ
 | Evil Portal HTML from SD | 5 | ✅ compile-verified |
 | Settings persist (SPIFFS) | 5 | ✅ compile-verified |
 | SPIFFS fallback | 5 | ✅ compile-verified |
-| NeoPixel feedback | 6 | |
-| Battery display | 6 | |
+| NeoPixel feedback | 6 | ✅ compile-verified |
+| Buzzer tones | 6 | ✅ compile-verified |
+| Battery monitoring | 6 | ✅ compile-verified |
+| Menu integration | 6 | ✅ compile-verified |
+| OTA update | 6 | ✅ compile-verified |
+| Power management | 6 | ✅ compile-verified |
 
 ---
 
@@ -585,6 +589,148 @@ All upstream WiFi attack features compile for ESP32-S3. Hardware testing is requ
 | 8 | PCAP write performance under heavy capture | |
 | 9 | SPIFFS partition not exhausted by fallback writes | |
 | 10 | Serial HTML fallback works for Evil Portal | |
+
+---
+
+## Phase 6: Badge Integration Test Procedures
+
+### NeoPixel LED Feedback Test (Issue #51)
+
+**Procedure:**
+1. Boot badge normally — observe breathing cyan pattern on 6× NeoPixel ring and status LED
+2. Start a WiFi scan (WiFi → Scan APs) — LEDs switch to rotating blue dot
+3. Start a deauth attack — LEDs switch to pulsing red
+4. Stop attack — LEDs return to idle breathing cyan
+5. Trigger a capture (PMKID scan near active WPA2 AP) — green flash on capture
+6. Check serial output for `[LED]` messages
+
+**What to verify on hardware:**
+- All 6 NeoPixels illuminate (no dead LEDs)
+- Status LED (GPIO 21) mirrors state
+- Colors correct (cyan idle, blue scan, red attack, green capture)
+- Animation smooth at ~30fps
+- No flicker or timing glitches during WiFi TX
+
+### Buzzer Test (Issue #52)
+
+**Procedure:**
+1. Navigate menus — short click tone on each selection
+2. Start a scan — rising two-tone on start
+3. Stop a scan — falling two-tone on stop
+4. Trigger low battery (if testable) — double 800Hz beep
+5. Navigate to Settings → toggle buzzer mute
+6. Verify all tones silenced when muted
+
+**What to verify on hardware:**
+- Buzzer audible at arm's length
+- Tones distinguishable from each other
+- No buzzer whine when idle (LEDC channel silent)
+- Mute setting works
+
+### Battery Monitor Test (Issue #53)
+
+**Procedure:**
+1. Boot badge — check serial for `[Battery] Monitor initialized`
+2. Check serial for periodic battery level readings
+3. Navigate to Device menu — battery percentage should display in status bar
+4. Drain battery below 15% — verify low battery warning tone
+5. Drain below 5% — verify critical warning (red bar, repeated tone every 30s)
+
+**What to verify on hardware:**
+- MAX17048 responds on I2C (no `[Battery]` errors in serial)
+- Percentage reading matches expected charge level
+- I2C bus stable with touch controller active simultaneously
+- Low/critical thresholds trigger correctly
+
+### Menu Integration Test (Issue #54)
+
+**Procedure:**
+1. Boot normally — Marauder menu displays
+2. Rotate encoder — menu scrolls smoothly
+3. Press encoder button — selects item with buzzer click
+4. Press ENTER — selects item with buzzer click
+5. Press BACK — navigates back
+6. Press BOOT — cycles backlight
+7. Navigate full menu tree: WiFi → Bluetooth → Device → Settings
+8. Verify all upstream menu items accessible
+
+**What to verify on hardware:**
+- No missed encoder steps
+- Touch + encoder don't conflict
+- Menu page computation correct for long lists
+- No crash navigating deep menu paths
+
+### OTA Update Test (Issue #55)
+
+**Menu path:** Device → Update Firmware → Web Update
+
+**Procedure:**
+1. Select Web Update from menu
+2. Badge creates WiFi AP — connect from laptop/phone
+3. Navigate to badge IP in browser
+4. Upload a test firmware binary
+5. Verify progress on badge screen
+6. Badge reboots with new firmware
+7. If update fails, verify rollback to previous firmware
+
+**What to verify on hardware:**
+- AP starts and is visible
+- Web UI loads in browser
+- Upload completes without timeout
+- Badge reboots successfully after update
+- Rollback works on corrupted upload
+
+### Power Management Test (Issue #56)
+
+**Procedure:**
+1. Boot badge, leave idle — after 2 minutes backlight should dim
+2. Press any button — backlight restores immediately
+3. Leave idle again — after 5 minutes badge enters light sleep
+4. Press BOOT/ENTER/BACK/encoder — badge wakes from sleep
+5. Start a WiFi scan — verify auto-sleep does NOT trigger during active scan
+6. Stop scan, leave idle — verify auto-sleep resumes
+
+**What to verify on hardware:**
+- Backlight dims to minimum (not off) at 2 minutes
+- Light sleep actually reduces current draw (measure with multimeter)
+- Wake-on-button reliable for all 4 wake sources
+- Peripherals (display, LEDs, buzzer) re-initialize correctly after wake
+- No crash on repeated sleep/wake cycles
+- WiFi/BLE state preserved across sleep (or cleanly restarted)
+
+### Phase 6 Compile Checklist
+
+| # | Test | Pass? |
+|---|------|-------|
+| 1 | `pio run -e bsideskc-badge` compiles with LED feedback | ✅ |
+| 2 | `pio run -e bsideskc-badge` compiles with buzzer | ✅ |
+| 3 | `pio run -e bsideskc-badge` compiles with battery monitor | ✅ |
+| 4 | `pio run -e bsideskc-badge` compiles with power manager | ✅ |
+| 5 | All Phase 6 modules link without errors | ✅ |
+| 6 | Full build succeeds with zero Phase 6 errors | ✅ |
+
+### Phase 6 Hardware Test Checklist (Pending)
+
+| # | Test | Pass? |
+|---|------|-------|
+| 1 | NeoPixel ring shows correct patterns | |
+| 2 | Status LED mirrors scan state | |
+| 3 | Buzzer tones audible and distinguishable | |
+| 4 | Buzzer mute works | |
+| 5 | Battery percentage reads correctly | |
+| 6 | Low battery warning triggers at ≤15% | |
+| 7 | Critical battery warning at ≤5% | |
+| 8 | I2C bus stable (touch + battery) | |
+| 9 | Encoder menu navigation smooth | |
+| 10 | All menu paths accessible | |
+| 11 | OTA web update completes | |
+| 12 | OTA rollback on failure | |
+| 13 | Backlight dims after 2min idle | |
+| 14 | Auto-sleep after 5min idle | |
+| 15 | Wake-on-button from all sources | |
+| 16 | Peripherals re-init after wake | |
+| 17 | Active scan prevents auto-sleep | |
+| 18 | No crash on repeated sleep/wake | |
 
 ---
 

@@ -2,9 +2,9 @@
 
 ESP32Marauder port for the BSidesKC ESP32-S3 conference badge.
 
-## Status: Phase 5 Complete
+## Status: Phase 6 Complete
 
-Phase 5 (Storage & Persistence) is complete — all storage features compile successfully for ESP32-S3. SD card interface, PCAP writing, Evil Portal HTML storage, settings persistence, and SPIFFS fallback all verified at compile time. Hardware runtime testing deferred to when badges are available.
+Phase 6 (Badge Integration) is complete — all badge-specific hardware features compile successfully for ESP32-S3. NeoPixel LED feedback, buzzer tones, battery monitoring, menu integration, OTA update support, and power management all verified at compile time. Hardware runtime testing deferred to when badges are available.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -13,16 +13,17 @@ Phase 5 (Storage & Persistence) is complete — all storage features compile suc
 | 3 | WiFi Features | ✅ Complete (compile-verified) |
 | 4 | BLE Features | ✅ Complete (compile-verified) |
 | 5 | Storage & Persistence | ✅ Complete (compile-verified) |
-| 6 | Badge Integration | 🔄 Next |
-| 7 | Testing & Polish | ⏳ Pending |
+| 6 | Badge Integration | ✅ Complete (compile-verified) |
+| 7 | Testing & Polish | 🔄 Next |
 
-### Phase 5 Highlights
-- SD card on dedicated SPI bus (pins 35/36/37/47), no conflict with display
-- PCAP double-buffered writing with PSRAM (8 KB buffers, libpcap format)
-- Evil Portal loads HTML templates from SD (up to 30 KB)
-- Settings persist to SPIFFS via `/settings.json` (ArduinoJson)
-- Automatic SPIFFS fallback when SD card unavailable
-- Build: 21.0% RAM, 22.4% Flash
+### Phase 6 Highlights
+- NeoPixel LED feedback: 5 patterns (idle, scanning, attack, capture, error) on 6× ring + status LED
+- Buzzer audio: 6 tone patterns for menu, scan, capture, error, low battery events
+- Battery monitoring: MAX17048 fuel gauge with low (15%) and critical (5%) warnings
+- Badge menu: LED brightness, buzzer mute, battery status, hardware test submenu
+- OTA update: Upstream Marauder web update via WiFi AP
+- Power management: Auto-dim (2min), auto-sleep (5min), wake-on-button
+- Build: 21.1% RAM, 22.6% Flash
 
 ## Hardware
 - BSidesKC ESP32-S3 badge (BadgePiratesLLC/QACode_27)
@@ -55,6 +56,7 @@ See the [`docs/`](docs/) directory for detailed documentation:
 - [Phase 3 Summary](docs/phase3-summary.md) — WiFi feature verification
 - [Phase 4 Summary](docs/phase4-summary.md) — BLE feature verification
 - [Phase 5 Summary](docs/phase5-summary.md) — Storage & persistence verification
+- [Phase 6 Summary](docs/phase6-summary.md) — Badge integration features
 - [Testing Guide](docs/testing-guide.md) — Test procedures for all phases
 - [WiFi Implementation Notes](docs/wifi-implementation-notes.md) — ESP32-S3 WiFi analysis
 - [BLE Implementation Notes](docs/ble-implementation-notes.md) — ESP32-S3 BLE/NimBLE analysis

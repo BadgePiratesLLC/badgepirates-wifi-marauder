@@ -42,6 +42,10 @@
 #include "hardware/input_test.h"
 #include "hardware/wifi_scan_test.h"
 #include "hardware/led_feedback.h"
+#ifdef HAS_SCREEN
+  #include "hardware/badge_menu.h"
+#endif
+#include "hardware/power_manager.h"
 
 // ---- Upstream global objects (must match esp32_marauder.ino externs) ----
 WiFiScan wifi_scan_obj;
@@ -308,12 +312,16 @@ void setup() {
   #ifdef HAS_SCREEN
     display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
     menu_function_obj.RunSetup();
+    badgeMenuSetup();
   #endif
 
   wifi_scan_obj.StartScan(WIFI_SCAN_OFF);
   cli_obj.RunSetup();
 
   Serial.println(F("[BSidesKC] Marauder ready."));
+
+  // Initialize power management (auto-sleep, backlight dimming)
+  powerManagerInit();
 }
 
 void loop() {
@@ -348,6 +356,7 @@ void loop() {
     bool enc_down = encoder_turned_down();
 
     if ((enc_up || enc_down) && inMenu) {
+      powerManagerResetActivity();
       Menu* m = menu_function_obj.current_menu;
       int count = m->list->size();
       if (count > 0) {
@@ -366,6 +375,7 @@ void loop() {
     }
 
     if (encoder_button_pressed() && inMenu) {
+      powerManagerResetActivity();
       buzzerPlay(TONE_BUTTON_PRESS);
       Menu* m = menu_function_obj.current_menu;
       if (m->list->size() > 0) {
@@ -381,6 +391,7 @@ void loop() {
   {
     ButtonEvent evt = buttonBootPoll();
     if (evt == BTN_EVT_RELEASE) {
+      powerManagerResetActivity();
       buzzerPlay(TONE_BUTTON_PRESS);
       brightnessCycle();
     }
@@ -406,8 +417,15 @@ void loop() {
       led_feedback_set(LED_SCANNING);
     else
       led_feedback_set(LED_ATTACK);
+
+    // Reset activity timer during active scans/attacks
+    if (mode != WIFI_SCAN_OFF && mode != WIFI_CONNECTED)
+      powerManagerResetActivity();
   }
   led_feedback_update();
+
+  // Power management: auto-dim and auto-sleep
+  powerManagerUpdate(currentTime);
 
   #ifdef HAS_NEOPIXEL_LED
     led_obj.main(currentTime);
