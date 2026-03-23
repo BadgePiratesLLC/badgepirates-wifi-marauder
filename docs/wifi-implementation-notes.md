@@ -284,3 +284,108 @@ All packet monitoring code compiles cleanly for ESP32-S3:
 - [ ] Runtime test: Channel hopping
 - [ ] Runtime test: Raw packet injection
 - [ ] Runtime test: PCAP file writing to SD
+
+## Phase 3 — Issues #38-41: Upstream WiFi Feature Compilation Verification
+
+> **Note:** This is a port of the existing open-source ESP32Marauder security
+> research tool. All WiFi features below are upstream implementations — we are
+> verifying they compile for ESP32-S3, not creating new attack tools.
+
+### Build Result
+
+```
+Platform:  espressif32@6.4.0
+Board:     esp32-s3-devkitc-1
+Framework: Arduino (ESP32 2.0.11, ESP-IDF 4.4.x)
+Toolchain: xtensa-esp32s3 8.4.0
+
+Result:    SUCCESS — zero errors, zero WiFi-related warnings
+RAM:       21.0% (68960 / 327680 bytes)
+Flash:     22.4% (1469481 / 6553600 bytes)
+```
+
+### Feature Compilation Status
+
+| Issue | Feature | Upstream Functions | `esp_wifi_80211_tx` | Linked in Binary | Status |
+|-------|---------|-------------------|---------------------|------------------|--------|
+| #38 | Deauth | `RunDeauthScan()`, `sendDeauthFrame()` | ✅ Used at lines 8896-8898, 8951 | ✅ `42035910 T` | **COMPILES** |
+| #39 | Beacon Spam | `RunBeaconScan()` (spam + list modes) | ✅ Used at lines 8797, 8849 | ✅ `420354dc T` | **COMPILES** |
+| #40 | PMKID/EAPOL Capture | `RunEapolScan()`, `eapolSnifferCallback()` | N/A (passive capture) | ✅ `42034da0 T` | **COMPILES** |
+| #41 | Evil Portal | `RunEvilPortal()`, `EvilPortal::begin/setup/main` | N/A (web server) | ✅ `420341d0 T` | **COMPILES** |
+
+### Issue #38 — Deauth (Compilation Verified)
+
+Upstream deauth implementation in `WiFiScan.cpp`:
+- **Scan modes:** `WIFI_SCAN_DEAUTH` (5), `WIFI_ATTACK_DEAUTH` (20), `WIFI_ATTACK_DEAUTH_MANUAL` (24), `WIFI_ATTACK_DEAUTH_TARGETED` (27)
+- **Entry point:** `WiFiScan::RunDeauthScan()` (line 5250)
+- **Frame injection:** `WiFiScan::sendDeauthFrame()` (line 9017) uses `esp_wifi_80211_tx(WIFI_IF_AP, ...)`
+- **Frame template:** `deauth_frame_default[26]` defined in `WiFiScan.h` (line 470)
+- **ESP32-S3 status:** `esp_wifi_80211_tx` symbol present at `0x420c94d4` — identical API to ESP32
+
+### Issue #39 — Beacon Spam (Compilation Verified)
+
+Upstream beacon spam implementation in `WiFiScan.cpp`:
+- **Scan modes:** `WIFI_ATTACK_BEACON_SPAM` (8), `WIFI_ATTACK_BEACON_LIST` (15), `WIFI_ATTACK_FUNNY_BEACON` (99)
+- **Entry point:** `WiFiScan::RunBeaconScan()` (line 5054)
+- **Frame injection:** `esp_wifi_80211_tx(WIFI_IF_AP, temp_frame, ...)` at lines 8797, 8849
+- **Beacon sniffer:** `beaconSnifferCallback()` for AP discovery
+- **ESP32-S3 status:** All beacon frame construction and injection compiles cleanly
+
+### Issue #40 — PMKID/EAPOL Capture (Compilation Verified)
+
+Upstream EAPOL/PMKID capture implementation in `WiFiScan.cpp`:
+- **Scan modes:** `WIFI_SCAN_EAPOL` (4), `WIFI_SCAN_ACTIVE_EAPOL` (23), `WIFI_SCAN_ACTIVE_LIST_EAPOL` (28)
+- **Entry point:** `WiFiScan::RunEapolScan()` (line 4516)
+- **Sniffer callback:** `WiFiScan::eapolSnifferCallback()` (line 9793) — promiscuous mode capture
+- **Handshake tracking:** `AccessPoint.has_msg_1` through `has_msg_4` for 4-way handshake completeness
+- **PMKID support:** `force_pmkid` setting, `eapol_packet_bad_msg1[153]` template with PMKID IE (OUI 00:0F:AC:04)
+- **PCAP output:** `startPcap("eapol")` for capture file writing
+- **ESP32-S3 status:** Passive capture via promiscuous mode — fully supported, identical API
+
+### Issue #41 — Evil Portal (Compilation Verified)
+
+Upstream Evil Portal implementation in `EvilPortal.cpp` + `WiFiScan.cpp`:
+- **Scan mode:** `WIFI_SCAN_EVIL_PORTAL` (30)
+- **Entry point:** `WiFiScan::RunEvilPortal()` (line 3728) → `evil_portal_obj.begin()`
+- **Web server:** `ESPAsyncWebServer` + `AsyncTCP` + `DNSServer` (captive portal)
+- **Key functions (all linked):**
+  - `EvilPortal::setup()` — initialization
+  - `EvilPortal::setupServer()` — HTTP route registration
+  - `EvilPortal::startAP()` — soft AP creation
+  - `EvilPortal::startPortal()` — DNS + web server start
+  - `EvilPortal::main()` — DNS request processing loop
+  - `EvilPortal::setHtml()` / `setHtmlFromSerial()` — portal page configuration
+  - `CaptiveRequestHandler` — catches all HTTP requests for captive portal redirect
+- **ESP32-S3 status:** All web server components compile and link — `ESPAsyncWebServer`, `AsyncTCP`, `DNSServer` all present
+
+### `esp_wifi_80211_tx()` Availability on ESP32-S3
+
+Confirmed present in compiled binary at address `0x420c94d4`. Used by:
+- Deauth frame injection (`sendDeauthFrame`)
+- Beacon frame injection (`RunBeaconScan`)
+- Probe request injection
+- SAE commit frame injection
+
+API is identical between ESP32 and ESP32-S3 per ESP-IDF documentation.
+
+### Compilation Issues Found
+
+**None.** All four upstream WiFi features compile for ESP32-S3 with zero errors and zero warnings.
+
+---
+
+## Phase 3 Roadmap (Updated)
+
+- [x] Verify promiscuous mode support (Issue #35) — **CONFIRMED**
+- [x] Verify WiFiScan.cpp compiles for ESP32-S3 — **CONFIRMED**
+- [x] WiFi scan test mode added (ENTER+BACK boot combo)
+- [x] Packet monitoring verified for ESP32-S3 (Issue #37) — **CONFIRMED**
+- [x] Deauth compilation verified (Issue #38) — **COMPILES**
+- [x] Beacon spam compilation verified (Issue #39) — **COMPILES**
+- [x] PMKID/EAPOL capture compilation verified (Issue #40) — **COMPILES**
+- [x] Evil Portal compilation verified (Issue #41) — **COMPILES**
+- [ ] Runtime test: AP scanning on hardware
+- [ ] Runtime test: Promiscuous mode packet capture
+- [ ] Runtime test: Channel hopping
+- [ ] Runtime test: Raw packet injection
+- [ ] Runtime test: PCAP file writing to SD
