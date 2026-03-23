@@ -2,19 +2,26 @@
 
 ESP32Marauder port for the BSidesKC ESP32-S3 conference badge.
 
-## Status: Phase 1 In Progress
+## Status: Phase 3 Complete
 
-Phase 1 (Project Setup & Build System) is actively being worked on. Track all progress via [GitHub Issues](https://github.com/BadgePiratesLLC/badgepirates-wifi-marauder/issues).
+Phase 3 (WiFi Features) is complete — all upstream WiFi attack features compile successfully for ESP32-S3. Hardware runtime testing deferred to when badges are available.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 1 | Project Setup & Build System | 🔄 In Progress |
-| 2 | Display & Input | ⏳ Pending |
-| 3 | WiFi Features | ⏳ Pending |
-| 4 | BLE Features | ⏳ Pending |
+| 1 | Project Setup & Build System | ✅ Complete |
+| 2 | Display & Input | ✅ Complete |
+| 3 | WiFi Features | ✅ Complete (compile-verified) |
+| 4 | BLE Features | 🔄 Next |
 | 5 | Storage & Persistence | ⏳ Pending |
 | 6 | Badge Integration | ⏳ Pending |
 | 7 | Testing & Polish | ⏳ Pending |
+
+### Phase 3 Highlights
+- ESP32-S3 promiscuous mode fully supported (identical API to ESP32)
+- All WiFi features compile: scanning, packet monitor, deauth, beacon spam, PMKID capture, Evil Portal
+- WiFi scan test mode added (ENTER+BACK at boot)
+- Zero upstream modifications maintained
+- Build: 21.0% RAM, 22.4% Flash
 
 ## Hardware
 - BSidesKC ESP32-S3 badge (BadgePiratesLLC/QACode_27)
@@ -42,6 +49,11 @@ pio device monitor -b 115200
 See the [`docs/`](docs/) directory for detailed documentation:
 - [PORTING_PLAN.md](PORTING_PLAN.md) — Full porting plan and phase breakdown
 - [GITHUB_ISSUES.md](GITHUB_ISSUES.md) — Issue tracker reference
+- [Phase 1 Summary](docs/phase1-summary.md) — Build system and project setup
+- [Phase 2 Summary](docs/phase2-summary.md) — Display and input integration
+- [Phase 3 Summary](docs/phase3-summary.md) — WiFi feature verification
+- [Testing Guide](docs/testing-guide.md) — Test procedures for all phases
+- [WiFi Implementation Notes](docs/wifi-implementation-notes.md) — ESP32-S3 WiFi analysis
 
 ## Based On
 - [ESP32Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko

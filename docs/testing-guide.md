@@ -178,6 +178,94 @@ The upstream Marauder menu system provides WiFi scanning via:
 
 ---
 
+## Phase 3: Upstream Attack Feature Verification
+
+### Compile Verification (Issues #38-41)
+
+All upstream WiFi attack features compile for ESP32-S3. Hardware testing is required to confirm runtime behavior.
+
+### Deauthentication Test (Issue #38)
+
+**Menu path:** WiFi → Scan APs → Select APs → Deauth
+
+**Procedure:**
+1. Scan for APs and select a target
+2. Start deauth attack from menu
+3. Verify serial output shows `esp_wifi_80211_tx()` calls
+4. Verify target clients disconnect (requires monitoring device)
+5. Press BACK to stop attack
+
+**What to verify on hardware:**
+- Raw frame injection via `esp_wifi_80211_tx()` succeeds
+- Deauth frames are actually transmitted (use second device to monitor)
+- Attack stops cleanly on BACK press
+- No crash on repeated start/stop cycles
+
+### Beacon Spam Test (Issue #39)
+
+**Menu path:** WiFi → Beacon Spam → (Random/List/Target)
+
+**Procedure:**
+1. Select beacon spam mode (Random recommended for first test)
+2. Verify serial output shows beacon frame construction
+3. Use a phone/laptop to see fake SSIDs appear in WiFi list
+4. Press BACK to stop
+
+**What to verify on hardware:**
+- Fake SSIDs visible on nearby devices
+- Frame rate is reasonable (not flooding serial)
+- Clean stop and return to menu
+
+### PMKID/EAPOL Capture Test (Issue #40)
+
+**Menu path:** WiFi → Scan APs → Select APs → PMKID Scan
+
+**Procedure:**
+1. Scan and select a WPA2 target AP
+2. Start PMKID/EAPOL scan
+3. Force a client reconnection to the target AP
+4. Verify `eapolSnifferCallback` fires (serial output)
+5. If SD card is available, verify PCAP file written
+
+**What to verify on hardware:**
+- EAPOL frames captured in promiscuous callback
+- PMKID extracted from first message of 4-way handshake
+- PCAP file contains valid capture (Phase 5 dependency)
+
+### Evil Portal Test (Issue #41)
+
+**Menu path:** WiFi → Evil Portal → (select portal)
+
+**Procedure:**
+1. Start Evil Portal from menu
+2. Verify AP starts (check with phone WiFi scan)
+3. Connect a client device to the portal AP
+4. Verify captive portal page loads in browser
+5. Submit test data and verify capture on serial
+6. Press BACK to stop portal
+
+**What to verify on hardware:**
+- AP mode activates and is visible to clients
+- DNS redirect works (captive portal auto-opens)
+- HTML portal page renders correctly
+- Form submissions captured and logged
+- Clean shutdown on exit
+
+### Phase 3 Attack Feature Compile Checklist
+
+| # | Test | Pass? |
+|---|------|-------|
+| 1 | Deauth code compiles (`WiFiScan::RunDeauth`) | ✅ |
+| 2 | Beacon spam compiles (`WiFiScan::RunBeaconSpam`) | ✅ |
+| 3 | Probe spam compiles (`WiFiScan::RunProbeSpam`) | ✅ |
+| 4 | EAPOL scan compiles (`WiFiScan::RunEapolScan`) | ✅ |
+| 5 | Evil Portal compiles (`EvilPortal::setup/begin`) | ✅ |
+| 6 | Pineapple scan compiles (`WiFiScan::RunPineappleScan`) | ✅ |
+| 7 | Raw TX compiles (`esp_wifi_80211_tx`) | ✅ |
+| 8 | Full build succeeds with zero WiFi errors | ✅ |
+
+---
+
 ## Feature Regression Matrix
 
 | Feature | Phase | Status |
@@ -189,11 +277,11 @@ The upstream Marauder menu system provides WiFi scanning via:
 | Rotary encoder | 2 | ✅ |
 | Input validation test | 2 | ✅ |
 | WiFi scan | 3 | ✅ |
-| Packet monitor | 3 | |
-| Deauth | 3 | |
-| Beacon spam | 3 | |
-| PMKID capture | 3 | |
-| Evil Portal | 3 | |
+| Packet monitor | 3 | ✅ compile-verified |
+| Deauth | 3 | ✅ compile-verified |
+| Beacon spam | 3 | ✅ compile-verified |
+| PMKID capture | 3 | ✅ compile-verified |
+| Evil Portal | 3 | ✅ compile-verified |
 | BLE scan | 4 | |
 | BLE skimmer detect | 4 | |
 | SD PCAP save | 5 | |
