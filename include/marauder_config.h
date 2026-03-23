@@ -115,6 +115,7 @@
 
 // ---- NeoPixel ----
 #define PIN NEOPIXEL_PIN     // 18
+#define Pixels NEOPIXEL_COUNT // 6
 
 // ---- GPS (V8 defaults, adjust when hardware confirmed) ----
 #define GPS_SERIAL_INDEX 1

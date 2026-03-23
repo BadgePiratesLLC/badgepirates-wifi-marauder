@@ -5,15 +5,20 @@
 ### Completed ✅
 - [x] PlatformIO project compiles for ESP32-S3 target (`esp32-s3-devkitc-1`)
 - [x] `platformio.ini` configured: 16MB flash, QIO @ 80MHz, correct partition table
-- [x] All library dependencies resolve (TFT_eSPI, FT6336U, NimBLE, NeoPixel, MAX1704X, ArduinoJson, etc.)
+- [x] All library dependencies resolve (TFT_eSPI, FT6336U, NimBLE, NeoPixel, MAX1704X, ArduinoJson, LinkedList, ESP32Ping, AsyncTCP, ESP Async WebServer, MicroNMEA, EspSoftwareSerial)
 - [x] `BSIDESKC_BADGE` board define created with full pin mapping
 - [x] `bsideskc_pins.h` — all 25+ GPIO assignments defined, no conflicts
 - [x] `bsideskc_config.h` — feature flags set (HAS_SCREEN, HAS_BT, HAS_SD, HAS_NEOPIXEL_LED, etc.)
 - [x] `marauder_config.h` — full upstream compatibility layer mapping badge pins → Marauder names
 - [x] TFT_eSPI configured via build flags (no User_Setup.h modification needed)
 - [x] ESP32Marauder vendored as git submodule at pinned commit
-- [x] Minimal `main.cpp` bootstrap compiles and links
+- [x] `configs.h` shim redirects upstream includes to `marauder_config.h`
 - [x] No GPIO pin conflicts across display, touch, SD, buttons, encoder, NeoPixels, buzzer
+- [x] Upstream Marauder `.cpp` sources compiled via `build_src_filter` (excluding `.ino`)
+- [x] Full `main.cpp` bootstrap replicates upstream `esp32_marauder.ino` initialization sequence
+- [x] All upstream global objects instantiated (WiFiScan, EvilPortal, Buffer, Settings, CommandLine, Display, MenuFunctions, LedInterface, SDInterface, GpsInterface, BatteryInterface)
+- [x] Backlight brightness control with persistent preferences
+- [x] `lib_ldf_mode = deep+` resolves all transitive upstream dependencies
 
 ### Verified in Simulation (No Hardware)
 - [x] All `#ifdef BSIDESKC_BADGE` code paths compile correctly
@@ -23,6 +28,9 @@
 - [x] I2C bus sharing: touch (FT6336U) and battery (MAX17048) on same SDA/SCL pins (8/9)
 - [x] SD card on dedicated SPI bus (pins 35/36/37/47) — no conflict with display SPI (11/12/10)
 - [x] Static analysis of config headers — no duplicate or conflicting defines
+- [x] Upstream source integration: all Marauder `.cpp` files compile and link against badge config
+- [x] `configs.h` shim correctly routes `#include "configs.h"` → `marauder_config.h`
+- [x] Include path ordering: `include/` (badge overrides) before `esp32marauder-upstream/esp32_marauder/`
 
 ## Needs Hardware Testing ⏳
 

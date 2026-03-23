@@ -2,7 +2,7 @@
 
 ## What Was Accomplished
 
-Phase 1 established the complete build system and project structure for porting ESP32Marauder to the BSidesKC badge hardware.
+Phase 1 established the complete build system, project structure, and upstream source integration for porting ESP32Marauder to the BSidesKC badge hardware.
 
 ### Deliverables
 1. **ESP32Marauder vendored as git submodule** — pinned to known-good upstream commit, license preserved
@@ -12,8 +12,10 @@ Phase 1 established the complete build system and project structure for porting 
    - `bsideskc_config.h` — feature flags and board identity
    - `marauder_config.h` — full upstream compatibility layer (MARAUDER_V8 baseline)
 4. **TFT_eSPI configured via build flags** — no upstream file modifications required
-5. **Minimal bootstrap firmware** (`main.cpp`) — display init, serial output, backlight control
-6. **Documentation:** porting plan, integration notes, hardware verification checklist, testing guide
+5. **`configs.h` shim** — upstream `#include "configs.h"` transparently routes to `marauder_config.h`
+6. **Full upstream source integration** — all Marauder `.cpp` files compiled via `build_src_filter`, `.ino` excluded
+7. **Complete bootstrap firmware** (`main.cpp`) — replicates upstream `esp32_marauder.ino` init sequence with all global objects, backlight control, and main loop
+8. **Documentation:** porting plan, integration notes, hardware verification checklist, testing guide
 
 ## Build Statistics
 
@@ -23,10 +25,12 @@ Phase 1 established the complete build system and project structure for porting 
 | Platform | `espressif32@6.4.0` |
 | Flash | 16MB QIO @ 80MHz |
 | Framework | Arduino |
-| Library deps | 7 (TFT_eSPI, FT6336U, NimBLE, NeoPixel, MAX1704X, BusIO, ArduinoJson) |
+| Library deps | 13 (TFT_eSPI, FT6336U, NimBLE, NeoPixel, MAX1704X, BusIO, RotaryEncoder, ArduinoJson, LinkedList, ESP32Ping, AsyncTCP, ESP Async WebServer, MicroNMEA, EspSoftwareSerial) |
 | Config defines | ~120 (marauder_config.h) |
 | GPIO assignments | 25 pins mapped, 0 conflicts |
 | Upstream reference | MARAUDER_V8 |
+| Source integration | All upstream `.cpp` compiled, `.ino` excluded |
+| LDF mode | `deep+` for transitive dependency resolution |
 
 ## Known Issues & Limitations
 
@@ -35,10 +39,9 @@ Phase 1 established the complete build system and project structure for porting 
 | **PSRAM unknown** (Issue #29) | Open — needs hardware | If absent, buffer sizes must be reduced; affects Evil Portal, PCAP capture, MAC history |
 | **Flash size unconfirmed** | Needs hardware | Board JSON says 8MB N8, porting plan says 16MB — must verify actual chip |
 | **Touch driver not yet adapted** | Phase 2 | FT6336U (I2C cap) needs shim to replace XPT2046 (SPI resistive) |
-| **No upstream source compilation** | Expected | Phase 1 scope was build system only; full Marauder source integration is Phase 2+ |
 | **HAS_DUAL_BAND omitted** | By design | Badge ESP32-S3 is single-band 2.4 GHz |
 
-## GitHub Issues Closed
+## GitHub Issues
 
 | Issue | Title | Status |
 |-------|-------|--------|
@@ -51,9 +54,10 @@ Phase 1 established the complete build system and project structure for porting 
 ## Readiness for Phase 2
 
 ### Ready ✅
-- Build system is stable and compiles cleanly
+- Build system is stable — upstream sources compile and link cleanly
 - Pin mappings are complete and conflict-free
 - Config architecture cleanly separates badge customization from upstream
+- Full Marauder init sequence runs (display, WiFi, SD, BLE, GPS, battery, NeoPixel)
 - Upstream submodule update path is documented
 - All Phase 2 dependencies (display, touch, buttons, encoder) have pins defined
 
