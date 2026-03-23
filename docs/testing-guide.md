@@ -446,10 +446,147 @@ All upstream WiFi attack features compile for ESP32-S3. Hardware testing is requ
 | BLE spam attacks | 4 | ✅ compile-verified |
 | AirTag scan/spoof | 4 | ✅ compile-verified |
 | Flipper/Flock detect | 4 | ✅ compile-verified |
-| SD PCAP save | 5 | |
-| Settings persist | 5 | |
+| SD card mount | 5 | ✅ compile-verified |
+| SD PCAP save | 5 | ✅ compile-verified |
+| Evil Portal HTML from SD | 5 | ✅ compile-verified |
+| Settings persist (SPIFFS) | 5 | ✅ compile-verified |
+| SPIFFS fallback | 5 | ✅ compile-verified |
 | NeoPixel feedback | 6 | |
 | Battery display | 6 | |
+
+---
+
+## Phase 5: Storage & Persistence Test Procedures
+
+### SD Card Mount Test (Issue #46)
+
+**Prerequisite:** FAT32-formatted micro SD card inserted in badge slot.
+
+**Procedure:**
+1. Insert SD card, power on badge
+2. Check serial output for SD mount messages
+3. Verify card type and size reported: `[SD] Card Type: SDHC, Size: XXX MB`
+4. Verify `/SCRIPTS` directory auto-created
+
+**What to verify on hardware:**
+- `SDInterface::initSD()` succeeds on separate SPI bus (pins 35/36/37/47)
+- No conflict with display SPI (pins 10/11/12)
+- Card type detection (SD, SDHC, SDXC)
+- Graceful failure message when no card inserted
+
+### PCAP File Write Test (Issue #47)
+
+**Prerequisite:** SD card mounted successfully.
+
+**Menu path:** WiFi → Scan APs → Select APs → PMKID Scan (or any capture mode)
+
+**Procedure:**
+1. Ensure `SavePCAP` setting is `true` (Settings menu)
+2. Start any packet capture (PMKID scan, probe sniff, etc.)
+3. Let capture run for 10-30 seconds
+4. Press BACK to stop capture
+5. Remove SD card and check on PC for `.pcap` files
+6. Open PCAP in Wireshark — verify valid 802.11 frames
+
+**What to verify on hardware:**
+- File created with auto-incremented name (`/name_0.pcap`)
+- PCAP global header: magic `0xa1b2c3d4`, version 2.4, snaplen 4096, link type 105
+- Per-packet headers have valid timestamps
+- Wireshark parses file without errors
+- Serial output shows `[BUF/BEGIN]...[BUF/CLOSE]` markers
+- Buffer flush doesn't cause frame drops under load
+
+### Evil Portal HTML Storage Test (Issue #48)
+
+**Prerequisite:** SD card with `index.html` file in root directory.
+
+**Setup:** Copy a test HTML file to SD card root:
+```html
+<html><body><h1>Test Portal</h1><form method="POST" action="/post">
+<input name="user"><input name="pass" type="password">
+<button>Login</button></form></body></html>
+```
+
+**Menu path:** WiFi → Evil Portal
+
+**Procedure:**
+1. Insert SD card with `index.html`
+2. Boot badge, navigate to WiFi → Evil Portal
+3. Verify portal lists `index.html` as available template
+4. Start portal — AP should broadcast
+5. Connect client device, verify HTML page loads
+6. Submit form, verify credentials captured on serial
+
+**Optional:** Create `/ap.config.txt` with custom SSID, verify portal uses it.
+
+**What to verify on hardware:**
+- `listDirToLinkedList()` finds `.html` files on SD
+- HTML loaded into PSRAM (up to 30 KB)
+- Portal serves HTML correctly via captive portal
+- Without SD: serial `sethtml=` command works as fallback
+
+### Settings Persistence Test (Issue #49)
+
+**Procedure:**
+1. Boot badge, navigate to Settings menu
+2. Change `SavePCAP` from `true` to `false`
+3. Change `EnableLED` from `true` to `false`
+4. Power cycle the badge
+5. Navigate back to Settings — verify changes persisted
+6. Check serial output for `[Settings] Loaded /settings.json`
+
+**What to verify on hardware:**
+- `/settings.json` written to SPIFFS
+- Settings survive power cycle
+- Missing settings auto-created with defaults on first load
+- JSON stays under 2 KB limit
+- No SPIFFS corruption after repeated writes
+
+### SPIFFS Fallback Test (Issue #50)
+
+**Procedure:**
+1. Remove SD card from badge
+2. Boot badge — verify serial shows SD mount failure (graceful)
+3. Start a packet capture
+4. Verify capture falls back to SPIFFS (`sd_obj.supported == false`)
+5. Check serial for SPIFFS write confirmation
+6. Verify settings still work (SPIFFS-only, unaffected by SD absence)
+
+**What to verify on hardware:**
+- No crash when SD absent
+- PCAP writes to SPIFFS partition
+- SPIFFS space constraints don't cause silent failures
+- Evil Portal falls back to serial HTML input
+- Settings unaffected by SD card presence/absence
+
+### Phase 5 Compile Checklist
+
+| # | Test | Pass? |
+|---|------|-------|
+| 1 | `pio run -e bsideskc-badge` compiles with SD enabled | ✅ |
+| 2 | `SDInterface.cpp` compiles with separate SPI bus | ✅ |
+| 3 | `Buffer.cpp` compiles with PSRAM allocation | ✅ |
+| 4 | `EvilPortal.cpp` compiles with SD HTML loading | ✅ |
+| 5 | `settings.cpp` compiles with SPIFFS + ArduinoJson | ✅ |
+| 6 | SPIFFS fallback path compiles | ✅ |
+| 7 | Full build succeeds with zero storage errors | ✅ |
+
+### Phase 5 Hardware Test Checklist (Pending)
+
+| # | Test | Pass? |
+|---|------|-------|
+| 1 | SD card mounts on separate SPI bus | |
+| 2 | SD + display SPI coexist without conflict | |
+| 3 | PCAP file written and valid in Wireshark | |
+| 4 | Evil Portal loads HTML from SD | |
+| 5 | Settings persist across power cycle | |
+| 6 | SPIFFS fallback works when SD absent | |
+| 7 | No crash on SD insert/remove scenarios | |
+| 8 | PCAP write performance under heavy capture | |
+| 9 | SPIFFS partition not exhausted by fallback writes | |
+| 10 | Serial HTML fallback works for Evil Portal | |
+
+---
 
 ## Known Issues
 _(Track issues here as they arise)_

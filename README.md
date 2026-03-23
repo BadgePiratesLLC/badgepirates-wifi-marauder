@@ -2,9 +2,9 @@
 
 ESP32Marauder port for the BSidesKC ESP32-S3 conference badge.
 
-## Status: Phase 4 Complete
+## Status: Phase 5 Complete
 
-Phase 4 (BLE Features) is complete — all upstream BLE features compile successfully for ESP32-S3 using NimBLE 1.4.3. Hardware runtime testing deferred to when badges are available.
+Phase 5 (Storage & Persistence) is complete — all storage features compile successfully for ESP32-S3. SD card interface, PCAP writing, Evil Portal HTML storage, settings persistence, and SPIFFS fallback all verified at compile time. Hardware runtime testing deferred to when badges are available.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -12,15 +12,16 @@ Phase 4 (BLE Features) is complete — all upstream BLE features compile success
 | 2 | Display & Input | ✅ Complete |
 | 3 | WiFi Features | ✅ Complete (compile-verified) |
 | 4 | BLE Features | ✅ Complete (compile-verified) |
-| 5 | Storage & Persistence | 🔄 Next |
-| 6 | Badge Integration | ⏳ Pending |
+| 5 | Storage & Persistence | ✅ Complete (compile-verified) |
+| 6 | Badge Integration | 🔄 Next |
 | 7 | Testing & Polish | ⏳ Pending |
 
-### Phase 4 Highlights
-- NimBLE 1.4.3 fully compatible with ESP32-S3 (no upgrade to 2.x needed)
-- ESP32-S3 BLE 5.0 support confirmed (2M PHY, Coded PHY, extended advertising available)
-- All BLE features compile: scanning, skimmer detect, AirTag scan/spoof, BLE spam (Apple/Samsung/Google/Windows/Flipper)
-- Zero upstream modifications maintained
+### Phase 5 Highlights
+- SD card on dedicated SPI bus (pins 35/36/37/47), no conflict with display
+- PCAP double-buffered writing with PSRAM (8 KB buffers, libpcap format)
+- Evil Portal loads HTML templates from SD (up to 30 KB)
+- Settings persist to SPIFFS via `/settings.json` (ArduinoJson)
+- Automatic SPIFFS fallback when SD card unavailable
 - Build: 21.0% RAM, 22.4% Flash
 
 ## Hardware
@@ -53,6 +54,7 @@ See the [`docs/`](docs/) directory for detailed documentation:
 - [Phase 2 Summary](docs/phase2-summary.md) — Display and input integration
 - [Phase 3 Summary](docs/phase3-summary.md) — WiFi feature verification
 - [Phase 4 Summary](docs/phase4-summary.md) — BLE feature verification
+- [Phase 5 Summary](docs/phase5-summary.md) — Storage & persistence verification
 - [Testing Guide](docs/testing-guide.md) — Test procedures for all phases
 - [WiFi Implementation Notes](docs/wifi-implementation-notes.md) — ESP32-S3 WiFi analysis
 - [BLE Implementation Notes](docs/ble-implementation-notes.md) — ESP32-S3 BLE/NimBLE analysis
