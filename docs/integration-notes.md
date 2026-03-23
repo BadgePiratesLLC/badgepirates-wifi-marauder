@@ -186,3 +186,130 @@ continue normal boot.
 
 QACode_27's `RotaryEncoder_Module.cpp` was the reference implementation for
 the same badge hardware encoder using the same ESP32RotaryEncoder library.
+
+## Badge Menu Integration (Phase 6, Issue #54) — Implemented
+
+### Problem
+
+Upstream Marauder's menu system has no awareness of badge-specific hardware
+(NeoPixel ring brightness, buzzer mute, battery gauge, hardware test modes).
+The `MenuFunctions` class keeps `deviceMenu` and `addNodes()` private, so we
+cannot inject items from outside the class.
+
+### Solution: Post-RunSetup Menu Injection
+
+After `menu_function_obj.RunSetup()` completes, `current_menu` (public) points
+to `mainMenu`. We directly manipulate the LinkedList to insert a "Badge"
+top-level menu item before the existing "Reboot" entry.
+
+```
+src/hardware/badge_menu.h    ← Public API: badgeMenuSetup()
+src/hardware/badge_menu.cpp  ← Badge submenu with 4 items + main menu injection
+```
+
+### Menu Structure
+
+```
+Main Menu
+  ├── WiFi          (upstream)
+  ├── Bluetooth     (upstream)
+  ├── GPS           (upstream, if detected)
+  ├── Device        (upstream: firmware update, brightness, info, settings)
+  ├── Badge         ← NEW
+  │   ├── Back
+  │   ├── LED Brightness    — Rotary encoder adjusts NeoPixel ring + status LED
+  │   ├── Buzzer Mute       — Toggle buzzer on/off
+  │   ├── Battery Status    — Full-screen percentage + bar graph
+  │   └── Hardware Test     — Runs input validation test (touch, buttons, encoder)
+  └── Reboot        (upstream)
+```
+
+### How It Works
+
+1. `badgeMenuSetup()` is called in `setup()` immediately after
+   `menu_function_obj.RunSetup()`.
+2. A static `badgeMenu` (Menu struct) is created with its own LinkedList of
+   MenuNode entries.
+3. The "Reboot" node is temporarily removed from mainMenu's list, "Badge" is
+   appended, then "Reboot" is re-added — preserving it as the last item.
+4. Each badge menu item uses `menu_function_obj.changeMenu()` (public) to
+   navigate back to the badge submenu after completing its action.
+
+### Badge Menu Items
+
+- **LED Brightness**: Interactive screen with a fill bar. Rotary encoder
+  adjusts brightness through 8 levels (5→255). Uses `led_feedback_set_brightness()`
+  to update both the 6× NeoPixel ring and status LED in real-time.
+- **Buzzer Mute**: Toggles `buzzerMute()`. Shows confirmation text for 800ms.
+- **Battery Status**: Reads `batteryGetPercent()` from the MAX17048 fuel gauge.
+  Displays percentage in large text with a color-coded bar (green/yellow/red).
+  Press encoder button or BACK to return.
+- **Hardware Test**: Launches `runInputValidationTest()` — the same test
+  available by holding BOOT during startup.
+
+### Rotary Encoder Navigation
+
+The existing encoder integration in `main.cpp` loop handles navigation of the
+badge submenu identically to all other menus — no special handling needed.
+The encoder code operates on `menu_function_obj.current_menu` which
+automatically points to `badgeMenu` when the user enters it.
+
+### No Upstream Modifications
+
+All badge menu code lives in `src/hardware/badge_menu.cpp`. The only change
+to `main.cpp` is adding the `#include` and calling `badgeMenuSetup()` after
+`RunSetup()`.
+
+## OTA Updates (Phase 6, Issue #55) — Verified
+
+### Upstream OTA Implementation
+
+Marauder's OTA-from-SD is implemented in `SDInterface::runUpdate()` and
+`SDInterface::performUpdate()` in the upstream submodule. The implementation:
+
+1. Opens `/update.bin` (or a user-selected file) from the SD card
+2. Uses Arduino's `Update` library (`Update.begin()`, `Update.writeStream()`,
+   `Update.end()`)
+3. Uses `esp_ota_ops.h` to set the next boot partition
+   (`esp_ota_get_next_update_partition()`, `esp_ota_set_boot_partition()`)
+4. Reboots via `ESP.restart()`
+
+### ESP32-S3 Compatibility
+
+The OTA implementation is fully compatible with ESP32-S3:
+- `<Update.h>` is part of the ESP32 Arduino core and supports all ESP32
+  variants including S3
+- `esp_ota_ops.h` is from ESP-IDF, which is the foundation for ESP32-S3
+- The partition table (`default_16MB.csv`) includes OTA partitions
+- No S3-specific code paths are needed — the upstream code works as-is
+
+### Menu Access
+
+OTA update is accessible via: **Main Menu → Device → Update Firmware**.
+This is the upstream menu item that calls `sd_obj.runUpdate()` after
+presenting an SD file browser filtered for `.bin` files.
+
+### OTA Update Procedure
+
+1. Build firmware: `pio run` produces `.pio/build/bsideskc-badge/firmware.bin`
+2. Copy `firmware.bin` to SD card root as `/update.bin`
+3. Insert SD card into badge
+4. Navigate to **Device → Update Firmware** and select the file
+5. Badge displays progress, writes to the next OTA partition, and reboots
+6. On successful boot, the new partition becomes active
+
+### Limitations
+
+- **No web OTA**: The upstream web update (`ESP_UPDATE` mode) requires
+  connecting to a WiFi network and hosting a web server. This works but is
+  less practical for badge use — SD update is preferred.
+- **No rollback UI**: If an OTA update fails to boot, the ESP32-S3 bootloader
+  will fall back to the previous partition automatically (ESP-IDF default
+  behavior with `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`).
+- **File size**: The 16MB flash with default partition table supports firmware
+  up to ~6.5MB per OTA slot. Current firmware is ~1.5MB.
+
+### Serial OTA Alternative
+
+For development, `pio run --target upload` flashes directly over USB-CDC.
+This bypasses the SD card entirely and is faster for iterative development.
