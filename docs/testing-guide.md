@@ -435,7 +435,7 @@ All upstream WiFi attack features compile for ESP32-S3. Hardware testing is requ
 | Button navigation | 2 | ✅ |
 | Rotary encoder | 2 | ✅ |
 | Input validation test | 2 | ✅ |
-| WiFi scan | 3 | ✅ |
+| WiFi scan | 3 | ✅ compile-verified |
 | Packet monitor | 3 | ✅ compile-verified |
 | Deauth | 3 | ✅ compile-verified |
 | Beacon spam | 3 | ✅ compile-verified |
@@ -457,6 +457,8 @@ All upstream WiFi attack features compile for ESP32-S3. Hardware testing is requ
 | Menu integration | 6 | ✅ compile-verified |
 | OTA update | 6 | ✅ compile-verified |
 | Power management | 6 | ✅ compile-verified |
+| Power consumption docs | 7 | ✅ documented |
+| UI polish | 7 | ✅ compile-verified |
 
 ---
 
@@ -736,3 +738,170 @@ All upstream WiFi attack features compile for ESP32-S3. Hardware testing is requ
 
 ## Known Issues
 _(Track issues here as they arise)_
+
+---
+
+## Phase 7: Power Testing & UI Polish Procedures
+
+### Power Consumption Testing (Issue #59)
+
+**Equipment needed:** USB power meter (e.g., Ruideng UM25C) or bench supply with current readout.
+
+#### Test 1: Idle Baseline
+1. Boot badge, wait for main menu
+2. Do not touch any controls
+3. Record current draw after 30 seconds of stability
+4. **Expected:** 80–120 mA
+
+#### Test 2: WiFi Active
+1. Navigate to WiFi → Scan APs
+2. Start scan, let it run for 30 seconds
+3. Record sustained current draw
+4. **Expected:** 180–220 mA
+
+#### Test 3: BLE Active
+1. Navigate to Bluetooth → BLE Scan
+2. Start scan, let it run for 30 seconds
+3. Record sustained current draw
+4. **Expected:** 140–180 mA
+
+#### Test 4: Backlight Sweep
+1. At main menu, press BOOT to cycle through all 10 brightness levels
+2. Record current at each level (pause 5 seconds per level)
+3. **Expected range:** Level 1 (~60 mA) to Level 10 (~120 mA)
+
+#### Test 5: NeoPixel Contribution
+1. Navigate to Badge → LED Brightness, set to 0%
+2. Record idle current
+3. Set LED brightness to 100%, record current
+4. **Expected delta:** 15–40 mA
+
+#### Test 6: Auto-Dim
+1. Leave badge idle for 2 minutes
+2. Verify backlight dims
+3. Record current after dim
+4. **Expected:** 60–90 mA
+
+#### Test 7: Light Sleep
+1. Leave badge idle for 5 minutes (or set shorter timeout for testing)
+2. Verify display turns off
+3. Record steady-state sleep current
+4. **Expected:** 5–10 mA
+
+#### Test 8: Wake from Sleep
+1. While in light sleep, press each wake source:
+   - BOOT button
+   - ENTER button
+   - BACK button
+   - Encoder button
+2. Verify badge wakes and display restores each time
+3. Record current spike on wake
+
+### UI Polish Verification (Issue #60)
+
+#### Test 1: Battery Status Screen
+1. Navigate to Badge → Battery Status
+2. Verify: cyan title "Battery Status" at top
+3. Verify: large percentage centered on screen
+4. Verify: progress bar with correct fill color (green/yellow/red)
+5. Verify: dim hint text "Press knob to return" at bottom
+6. Verify: all elements fit within 240×320 without overlap
+
+#### Test 2: LED Brightness Screen
+1. Navigate to Badge → LED Brightness
+2. Verify: cyan title "LED Brightness" at top
+3. Verify: progress bar updates smoothly with encoder rotation
+4. Verify: percentage label updates below bar
+5. Verify: dim hint text at bottom
+6. Verify: NeoPixels change brightness in real-time
+
+#### Test 3: Buzzer Mute Screen
+1. Navigate to Badge → Buzzer Mute
+2. Verify: centered status message "Buzzer: MUTED" or "Buzzer: ON"
+3. Verify: message uses cyan title color
+4. Verify: auto-returns to Badge menu after ~800ms
+
+#### Test 4: Boot Splash
+1. Power cycle badge
+2. Verify: "BSidesKC Badge" / "ESP32 Marauder" / version centered on screen
+3. Verify: text readable, no truncation on 240px width
+
+#### Test 5: Menu Navigation
+1. Scroll through all main menu items with encoder
+2. Verify: items don't overflow screen (12 per page max)
+3. Verify: page transitions smooth at item 12+
+4. Verify: selected item highlighted correctly
+5. Verify: touch selection works alongside encoder
+
+#### Test 6: Low Battery Overlay
+1. (If testable) Drain battery below 5%
+2. Verify: red bar appears at top of screen
+3. Verify: "LOW BATTERY!" text readable in white on red
+4. Verify: overlay doesn't obscure menu functionality
+
+### Phase 7 Compile Checklist
+
+| # | Test | Pass? |
+|---|------|-------|
+| 1 | `pio run -e bsideskc-badge` compiles with UI polish changes | ✅ |
+| 2 | No new warnings introduced | ✅ |
+| 3 | RAM usage stable (~21.1%) | ✅ |
+| 4 | Flash usage stable (~22.6%) | ✅ |
+
+### Phase 7 Hardware Test Checklist (Pending)
+
+| # | Test | Pass? |
+|---|------|-------|
+| 1 | Idle current 80–120 mA | |
+| 2 | WiFi scan current 180–220 mA | |
+| 3 | BLE scan current 140–180 mA | |
+| 4 | Backlight dim reduces current | |
+| 5 | Light sleep current 5–10 mA | |
+| 6 | Wake from sleep works (all 4 sources) | |
+| 7 | Battery status screen layout correct | |
+| 8 | LED brightness screen layout correct | |
+| 9 | Buzzer mute screen layout correct | |
+| 10 | Boot splash readable on 240px display | |
+| 11 | Menu items fit 12 per page | |
+| 12 | Low battery overlay visible | |
+| 13 | All text readable at arm's length | |
+| 14 | No UI element overflow on 320×240 | |
+
+---
+
+## Final Regression Matrix (All Phases)
+
+| Feature | Phase | Status |
+|---------|-------|--------|
+| Display init | 2 | ✅ |
+| Backlight control | 2 | ✅ |
+| Touch input | 2 | ✅ |
+| Button navigation | 2 | ✅ |
+| Rotary encoder | 2 | ✅ |
+| Input validation test | 2 | ✅ |
+| WiFi scan | 3 | ✅ compile-verified |
+| Packet monitor | 3 | ✅ compile-verified |
+| Deauth | 3 | ✅ compile-verified |
+| Beacon spam | 3 | ✅ compile-verified |
+| PMKID capture | 3 | ✅ compile-verified |
+| Evil Portal | 3 | ✅ compile-verified |
+| BLE scan | 4 | ✅ compile-verified |
+| BLE skimmer detect | 4 | ✅ compile-verified |
+| BLE spam attacks | 4 | ✅ compile-verified |
+| AirTag scan/spoof | 4 | ✅ compile-verified |
+| Flipper/Flock detect | 4 | ✅ compile-verified |
+| SD card mount | 5 | ✅ compile-verified |
+| SD PCAP save | 5 | ✅ compile-verified |
+| Evil Portal HTML from SD | 5 | ✅ compile-verified |
+| Settings persist (SPIFFS) | 5 | ✅ compile-verified |
+| SPIFFS fallback | 5 | ✅ compile-verified |
+| NeoPixel feedback | 6 | ✅ compile-verified |
+| Buzzer tones | 6 | ✅ compile-verified |
+| Battery monitoring | 6 | ✅ compile-verified |
+| Menu integration | 6 | ✅ compile-verified |
+| OTA update | 6 | ✅ compile-verified |
+| Power management | 6 | ✅ compile-verified |
+| Power consumption docs | 7 | ✅ documented |
+| UI polish | 7 | ✅ compile-verified |
+| Deployment guide | 7 | ✅ documented |
+| User guide | 7 | ✅ documented |

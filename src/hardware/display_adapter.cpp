@@ -68,4 +68,30 @@ void DisplayAdapter::backlightSave() {
   _blPrefs.putUChar("level", _blLevel);
 }
 
+// ---- UI Polish Helpers (Phase 7, Issue #60) ----
+
+#include "Display.h"
+extern Display display_obj;
+
+void DisplayAdapter::drawCenteredTitle(const char* text) {
+  display_obj.tft.setTextColor(UI_COLOR_TITLE, UI_COLOR_BG);
+  display_obj.tft.drawCentreString(text, TFT_WIDTH / 2, UI_TITLE_Y, UI_TITLE_FONT);
+}
+
+void DisplayAdapter::drawStatusHint(const char* text) {
+  display_obj.tft.setTextColor(UI_COLOR_DIM, UI_COLOR_BG);
+  display_obj.tft.drawCentreString(text, TFT_WIDTH / 2, TFT_HEIGHT - UI_STATUS_H, UI_STATUS_FONT);
+}
+
+void DisplayAdapter::drawProgressBar(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                                     uint8_t pct, uint16_t color) {
+  if (pct > 100) pct = 100;
+  display_obj.tft.drawRect(x, y, w, h, UI_COLOR_BODY);
+  uint16_t fillW = (uint16_t)((uint32_t)(w - 4) * pct / 100);
+  display_obj.tft.fillRect(x + 2, y + 2, fillW, h - 4, color);
+  // Clear remainder
+  if (fillW < w - 4)
+    display_obj.tft.fillRect(x + 2 + fillW, y + 2, w - 4 - fillW, h - 4, UI_COLOR_BG);
+}
+
 #endif

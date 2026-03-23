@@ -22,22 +22,15 @@ static Menu badgeMenu;
 
 static void showBatteryStatus() {
   display_obj.clearScreen();
-  display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  display_obj.tft.drawCentreString("Battery Status", TFT_WIDTH / 2, 30, 2);
+  badge_display.drawCenteredTitle("Battery Status");
 
   int8_t pct = batteryGetPercent();
-  uint16_t color = (pct > 50) ? TFT_GREEN : (pct > 20) ? TFT_YELLOW : TFT_RED;
-  display_obj.tft.setTextColor(color, TFT_BLACK);
-  display_obj.tft.drawCentreString(String(pct) + "%", TFT_WIDTH / 2, 80, 4);
+  uint16_t color = (pct > 50) ? UI_COLOR_OK : (pct > 20) ? UI_COLOR_WARN : UI_COLOR_ERR;
+  display_obj.tft.setTextColor(color, UI_COLOR_BG);
+  display_obj.tft.drawCentreString(String(pct) + "%", TFT_WIDTH / 2, 70, 4);
 
-  // Draw bar
-  uint16_t barX = 40, barY = 140, barW = TFT_WIDTH - 80, barH = 24;
-  display_obj.tft.drawRect(barX, barY, barW, barH, TFT_WHITE);
-  uint16_t fillW = max(0, (int)((barW - 4) * pct / 100));
-  display_obj.tft.fillRect(barX + 2, barY + 2, fillW, barH - 4, color);
-
-  display_obj.tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  display_obj.tft.drawCentreString("Press knob to return", TFT_WIDTH / 2, TFT_HEIGHT - 30, 1);
+  badge_display.drawProgressBar(UI_BAR_MARGIN, 130, TFT_WIDTH - UI_BAR_MARGIN * 2, UI_BAR_H, max(0, (int)pct), color);
+  badge_display.drawStatusHint("Press knob to return");
 
   // Wait for encoder button or BACK
   while (true) {
@@ -53,10 +46,7 @@ static void showBatteryStatus() {
 static void toggleBuzzerMute() {
   buzzerMute(!buzzerIsMuted());
   display_obj.clearScreen();
-  display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  display_obj.tft.drawCentreString(
-    buzzerIsMuted() ? "Buzzer: MUTED" : "Buzzer: ON",
-    TFT_WIDTH / 2, TFT_HEIGHT / 2 - 10, 2);
+  badge_display.drawCenteredTitle(buzzerIsMuted() ? "Buzzer: MUTED" : "Buzzer: ON");
   delay(800);
   menu_function_obj.changeMenu(&badgeMenu, true);
 }
@@ -66,21 +56,18 @@ static void ledBrightnessMode() {
   const uint8_t numLevels = 8;
   static uint8_t idx = 2;  // default ~33
 
-  display_obj.tft.fillScreen(TFT_BLACK);
-  display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  display_obj.tft.drawCentreString("LED Brightness", TFT_WIDTH / 2, 20, 2);
-  display_obj.tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  display_obj.tft.drawCentreString("Rotate to adjust, press to save", TFT_WIDTH / 2, TFT_HEIGHT - 25, 1);
+  display_obj.tft.fillScreen(UI_COLOR_BG);
+  badge_display.drawCenteredTitle("LED Brightness");
+  badge_display.drawStatusHint("Rotate to adjust, press to save");
 
   auto drawBar = [&]() {
-    uint16_t barX = 30, barY = TFT_HEIGHT / 2 - 15, barW = TFT_WIDTH - 60, barH = 30;
-    display_obj.tft.drawRect(barX, barY, barW, barH, TFT_WHITE);
-    display_obj.tft.fillRect(barX + 2, barY + 2, barW - 4, barH - 4, TFT_BLACK);
-    uint16_t fillW = (barW - 4) * (idx + 1) / numLevels;
-    display_obj.tft.fillRect(barX + 2, barY + 2, fillW, barH - 4, TFT_MAGENTA);
-    display_obj.tft.fillRect(0, barY + barH + 5, TFT_WIDTH, 20, TFT_BLACK);
-    display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    display_obj.tft.drawCentreString(String(levels[idx] * 100 / 255) + "%", TFT_WIDTH / 2, barY + barH + 8, 2);
+    uint16_t barX = UI_BAR_MARGIN, barY = TFT_HEIGHT / 2 - 15;
+    uint16_t barW = TFT_WIDTH - UI_BAR_MARGIN * 2;
+    uint8_t pct = (idx + 1) * 100 / numLevels;
+    badge_display.drawProgressBar(barX, barY, barW, UI_BAR_H, pct, TFT_MAGENTA);
+    display_obj.tft.fillRect(0, barY + UI_BAR_H + 5, TFT_WIDTH, 20, UI_COLOR_BG);
+    display_obj.tft.setTextColor(UI_COLOR_BODY, UI_COLOR_BG);
+    display_obj.tft.drawCentreString(String(levels[idx] * 100 / 255) + "%", TFT_WIDTH / 2, barY + UI_BAR_H + 8, UI_TITLE_FONT);
   };
   drawBar();
 

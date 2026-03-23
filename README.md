@@ -2,9 +2,9 @@
 
 ESP32Marauder port for the BSidesKC ESP32-S3 conference badge.
 
-## Status: Phase 6 Complete
+## Status: All Phases Complete
 
-Phase 6 (Badge Integration) is complete — all badge-specific hardware features compile successfully for ESP32-S3. NeoPixel LED feedback, buzzer tones, battery monitoring, menu integration, OTA update support, and power management all verified at compile time. Hardware runtime testing deferred to when badges are available.
+All 7 development phases are complete — the BSidesKC ESP32-S3 Marauder port compiles successfully with all features. Hardware runtime testing deferred to when badges are available.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -14,16 +14,11 @@ Phase 6 (Badge Integration) is complete — all badge-specific hardware features
 | 4 | BLE Features | ✅ Complete (compile-verified) |
 | 5 | Storage & Persistence | ✅ Complete (compile-verified) |
 | 6 | Badge Integration | ✅ Complete (compile-verified) |
-| 7 | Testing & Polish | 🔄 Next |
+| 7 | Testing & Polish | ✅ Complete |
 
-### Phase 6 Highlights
-- NeoPixel LED feedback: 5 patterns (idle, scanning, attack, capture, error) on 6× ring + status LED
-- Buzzer audio: 6 tone patterns for menu, scan, capture, error, low battery events
-- Battery monitoring: MAX17048 fuel gauge with low (15%) and critical (5%) warnings
-- Badge menu: LED brightness, buzzer mute, battery status, hardware test submenu
-- OTA update: Upstream Marauder web update via WiFi AP
-- Power management: Auto-dim (2min), auto-sleep (5min), wake-on-button
-- Build: 21.1% RAM, 22.6% Flash
+### Build Stats
+- RAM: 21.1% (69 KB / 327 KB)
+- Flash: 22.6% (1.48 MB / 6.55 MB)
 
 ## Hardware
 - BSidesKC ESP32-S3 badge (BadgePiratesLLC/QACode_27)
@@ -49,6 +44,8 @@ pio device monitor -b 115200
 ## Documentation
 
 See the [`docs/`](docs/) directory for detailed documentation:
+- [DEPLOYMENT.md](DEPLOYMENT.md) — Build, flash, and deployment instructions
+- [USER_GUIDE.md](USER_GUIDE.md) — End user guide for badge operation
 - [PORTING_PLAN.md](PORTING_PLAN.md) — Full porting plan and phase breakdown
 - [GITHUB_ISSUES.md](GITHUB_ISSUES.md) — Issue tracker reference
 - [Phase 1 Summary](docs/phase1-summary.md) — Build system and project setup
@@ -57,6 +54,7 @@ See the [`docs/`](docs/) directory for detailed documentation:
 - [Phase 4 Summary](docs/phase4-summary.md) — BLE feature verification
 - [Phase 5 Summary](docs/phase5-summary.md) — Storage & persistence verification
 - [Phase 6 Summary](docs/phase6-summary.md) — Badge integration features
+- [Phase 7 Summary](docs/phase7-summary.md) — Testing, polish, and final docs
 - [Testing Guide](docs/testing-guide.md) — Test procedures for all phases
 - [WiFi Implementation Notes](docs/wifi-implementation-notes.md) — ESP32-S3 WiFi analysis
 - [BLE Implementation Notes](docs/ble-implementation-notes.md) — ESP32-S3 BLE/NimBLE analysis
