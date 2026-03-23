@@ -266,6 +266,35 @@ All upstream WiFi attack features compile for ESP32-S3. Hardware testing is requ
 
 ---
 
+## WiFi Feature Testing — Responsible Use
+
+> **This firmware is a port of the open-source ESP32Marauder security research
+> tool. WiFi features are intended for authorized security research and
+> education only.**
+
+### Legal and Ethical Requirements
+
+- **Only test on networks you own or have explicit written authorization to test**
+- Unauthorized use of deauth, beacon spam, or Evil Portal features against
+  networks you do not own is illegal in most jurisdictions
+- Comply with all applicable local, state, and federal laws (e.g., CFAA in the
+  US, Computer Misuse Act in the UK)
+- PMKID/EAPOL capture should only target your own access points
+- Evil Portal testing must not be used to collect credentials from
+  unsuspecting users
+- Use an RF-shielded environment or Faraday cage when possible to avoid
+  affecting neighboring networks
+
+### Testing Environment Recommendations
+
+- Use a dedicated test AP that you own (isolated from production networks)
+- Disable the test AP's internet uplink during testing
+- Use a non-overlapping channel to minimize interference
+- Keep a log of all testing activities
+- Power down WiFi attack features immediately after testing
+
+---
+
 ## Feature Regression Matrix
 
 | Feature | Phase | Status |
