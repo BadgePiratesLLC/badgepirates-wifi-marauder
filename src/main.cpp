@@ -37,6 +37,8 @@
 #endif
 
 #include "hardware/encoder_handler.h"
+#include "hardware/input_test.h"
+#include "hardware/wifi_scan_test.h"
 
 // ---- Upstream global objects (must match esp32_marauder.ino externs) ----
 WiFiScan wifi_scan_obj;
@@ -214,6 +216,22 @@ void setup() {
   encoder_init();
   Serial.println(F("[BSidesKC] Rotary encoder initialized"));
 
+  // WiFi scan test: hold ENTER + BACK during boot (check combo FIRST)
+  #if defined(HAS_SCREEN) && defined(HAS_BUTTONS)
+  if (digitalRead(C_BTN) == LOW && digitalRead(D_BTN) == LOW) {
+    runWifiScanTest();
+    display_obj.clearScreen();
+  }
+  else
+  #endif
+  // Input validation test: hold BOOT during boot
+  #ifdef HAS_SCREEN
+  if (digitalRead(BTN_BOOT) == LOW) {
+    runInputValidationTest();
+    display_obj.clearScreen();
+  }
+  else
+  #endif
   // Encoder test: hold BACK during boot
   #ifdef HAS_BUTTONS
   if (digitalRead(D_BTN) == LOW) {
@@ -235,13 +253,16 @@ void setup() {
     }
     display_obj.clearScreen();
   }
+  else
   #endif
   #ifdef HAS_CYD_TOUCH
-    if (digitalRead(C_BTN) == LOW) {
-      runTouchTest();
-      display_obj.clearScreen();
-    }
+  if (digitalRead(C_BTN) == LOW) {
+    runTouchTest();
+    display_obj.clearScreen();
+  }
+  else
   #endif
+  { /* no test mode */ }
 
   settings_obj.begin();
   buffer_obj = Buffer();
