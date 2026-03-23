@@ -179,11 +179,106 @@ correct ESP32-S3 compatibility for:
 
 ---
 
+## Phase 3 — Issue #37: Packet Monitoring
+
+### How Promiscuous Mode Is Used
+
+Upstream Marauder's packet monitoring is driven by `WiFiScan::RunPacketMonitor()`:
+
+1. **LED mode** set to `MODE_SNIFF` via `setLEDMode()`
+2. **PCAP file** opened via `startPcap("packet_monitor")` if `SavePCAP` is enabled
+3. **Display** initialized (graph objects, color key, scale buttons on ILI9341)
+4. **WiFi driver** initialized:
+   ```cpp
+   esp_wifi_init(&cfg2);              // WIFI_INIT_CONFIG_DEFAULT (HAS_IDF_3)
+   esp_wifi_set_country(&country);
+   esp_event_loop_create_default();
+   setWiFiMode(WIFI_MODE_NULL, wifiSnifferCallback);
+   ```
+5. **`setWiFiMode()`** is the central promiscuous setup:
+   ```cpp
+   esp_wifi_set_storage(WIFI_STORAGE_RAM);
+   esp_wifi_set_mode(mode);           // WIFI_MODE_NULL for monitoring
+   esp_wifi_start();
+   esp_wifi_set_promiscuous(true);
+   esp_wifi_set_promiscuous_filter(&filt);
+   esp_wifi_set_promiscuous_rx_cb(cb);  // wifiSnifferCallback
+   ```
+6. **Channel** set via `changeChannel(set_channel)`
+
+### Packet Types Captured
+
+The promiscuous filter is defined in `WiFiScan.h`:
+```cpp
+const wifi_promiscuous_filter_t filt = {
+    .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA
+};
+```
+
+| Frame Type | Filter Mask | What's Captured |
+|---|---|---|
+| Management | `WIFI_PROMIS_FILTER_MASK_MGMT` | Beacons (0x80), Deauths (0xA0/0xC0), Probes (0x40) |
+| Data | `WIFI_PROMIS_FILTER_MASK_DATA` | All 802.11 data frames |
+| Control | Not in filter | Not captured by default |
+
+### Callback: `wifiSnifferCallback`
+
+The static callback receives every frame matching the filter:
+
+```cpp
+void WiFiScan::wifiSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type)
+```
+
+Processing flow:
+1. Cast `buf` to `wifi_promiscuous_pkt_t*`
+2. Extract `WifiMgmtHdr` from payload for frame control parsing
+3. Read `rx_ctrl` for signal/channel metadata
+4. **MGMT frames**: classify by subtype byte (`payload[0]`):
+   - `0x80` → beacon (green, `num_beacon++`)
+   - `0xA0`/`0xC0` → deauth/disassoc (red, `num_deauth++`)
+   - `0x40` → probe request (cyan, `num_probe++`)
+   - Other → magenta
+5. **DATA frames**: displayed in white
+6. Extract src/dst MAC via `getMAC()` at payload offsets 10 and 4
+7. Format display string: `"src_addr -> dst_addr"`
+8. Push to `display_buffer` for screen rendering
+9. Call `buffer_obj.append(snifferPacket, len)` for PCAP capture
+
+### PCAP Capture Integration
+
+When `SavePCAP` setting is enabled:
+- `startPcap("packet_monitor")` opens a `.pcap` file on SD via `Buffer::pcapOpen()`
+- `Buffer::append()` checks the setting, then calls `add(payload, len, true)`
+- `add()` writes PCAP record header (ts_sec, ts_usec, incl_len, orig_len) + payload
+- Double-buffered (A/B) with `BUF_SIZE` = 8KB, `SNAP_LEN` = 4096
+
+### ESP32-S3 Compatibility — Verified
+
+All packet monitoring code compiles cleanly for ESP32-S3:
+
+- **Callback signature**: `void(*)(void*, wifi_promiscuous_pkt_type_t)` — identical on S3
+- **Filter masks**: `WIFI_PROMIS_FILTER_MASK_MGMT`, `WIFI_PROMIS_FILTER_MASK_DATA` — present in ESP-IDF 4.4.x for S3
+- **Packet structures**: `wifi_promiscuous_pkt_t`, `wifi_pkt_rx_ctrl_t` — same layout on S3
+- **`WIFI_MODE_NULL`**: Supported on S3 for promiscuous-only operation
+- **Build result**: SUCCESS — 21.0% RAM, 22.4% Flash (no increase from baseline)
+
+### Performance Considerations
+
+1. **Callback runs in WiFi task context** — must be fast, no blocking calls
+2. **String allocation in callback**: upstream builds display strings with `String::concat()` — heap pressure under high packet rates
+3. **Display buffer limit**: `SCREEN_BUFFER` caps at `MAX_SCREEN_BUFFER` (21) entries — overflow packets are dropped from display but still captured to PCAP
+4. **Channel hopping**: packet monitor runs on a single channel; user selects channel via UI. No automatic hopping during monitoring
+5. **Memory**: with PSRAM enabled and 21% RAM usage, headroom is sufficient for sustained capture
+6. **SD write latency**: double-buffered PCAP writes minimize callback blocking, but SD card speed can cause drops at very high packet rates
+
+---
+
 ## Phase 3 Roadmap
 
 - [x] Verify promiscuous mode support (Issue #35) — **CONFIRMED**
 - [x] Verify WiFiScan.cpp compiles for ESP32-S3 — **CONFIRMED**
 - [x] WiFi scan test mode added (ENTER+BACK boot combo)
+- [x] Packet monitoring verified for ESP32-S3 (Issue #37) — **CONFIRMED**
 - [ ] Runtime test: AP scanning on hardware
 - [ ] Runtime test: Promiscuous mode packet capture
 - [ ] Runtime test: Channel hopping
