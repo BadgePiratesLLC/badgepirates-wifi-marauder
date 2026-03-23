@@ -37,6 +37,7 @@
 #endif
 
 #include "hardware/encoder_handler.h"
+#include "hardware/input_test.h"
 
 // ---- Upstream global objects (must match esp32_marauder.ino externs) ----
 WiFiScan wifi_scan_obj;
@@ -213,6 +214,14 @@ void setup() {
   // Initialize rotary encoder (A:45, B:48, Button:20)
   encoder_init();
   Serial.println(F("[BSidesKC] Rotary encoder initialized"));
+
+  // Input validation test: hold BOOT during boot
+  #ifdef HAS_SCREEN
+  if (digitalRead(BTN_BOOT) == LOW) {
+    runInputValidationTest();
+    display_obj.clearScreen();
+  }
+  #endif
 
   // Encoder test: hold BACK during boot
   #ifdef HAS_BUTTONS
