@@ -2,12 +2,17 @@
 // BSidesKC Badge → ESP32 Marauder Board Configuration
 // Based on MARAUDER_V8 with badge-specific pin overrides.
 // This file is included INSTEAD of upstream configs.h board sections.
+// Define the upstream guard so configs.h becomes a no-op when included.
+#ifndef configs_h
+#define configs_h
+#endif
 
 #include "bsideskc_pins.h"
 #include "bsideskc_config.h"
 
 // ---- Board Identity ----
 #define BSIDESKC_BADGE
+#define MARAUDER_V8  // upstream .cpp files check this for V8-specific code paths
 #define HARDWARE_NAME "BSidesKC Badge"
 #define MARAUDER_VERSION "v1.11.0"
 
@@ -27,13 +32,22 @@
 
 // ---- Feature Flags (V8 baseline, badge adjustments) ----
 // Matches V8: HAS_TOUCH, HAS_SCREEN, HAS_FULL_SCREEN, HAS_BT,
-//   HAS_SD, USE_SD, HAS_PSRAM, HAS_NIMBLE_2, HAS_IDF_3, HAS_GPS, HAS_C5_SD
+//   HAS_SD, USE_SD, HAS_PSRAM, HAS_IDF_3, HAS_GPS, HAS_SEPARATE_SD
 // Badge adds: HAS_NEOPIXEL_LED, HAS_BUTTONS, HAS_BATTERY
-// Badge removes: HAS_DUAL_BAND (single-band ESP32-S3)
+// Badge removes: HAS_DUAL_BAND (single-band ESP32-S3), HAS_NIMBLE_2 (using NimBLE 1.4.x)
 #define HAS_PSRAM
 #define HAS_GPS
-#define HAS_C5_SD
+#define HAS_SEPARATE_SD
 // HAS_DUAL_BAND intentionally omitted — badge is single-band ESP32-S3
+
+// ---- Touch: FT6336U via XPT2046 shim (see include/XPT2046_Touchscreen.h) ----
+#define HAS_CYD_TOUCH
+// Dummy XPT2046 pin values — the shim ignores them but upstream code references them
+#define XPT2046_IRQ   -1
+#define XPT2046_MOSI  -1
+#define XPT2046_MISO  -1
+#define XPT2046_CLK   -1
+#define XPT2046_CS    -1
 
 // ---- Display Pin Mapping (Marauder names ← badge pins) ----
 #define TFT_MOSI    TFT_MOSI_PIN   // 11
@@ -134,7 +148,10 @@
 #define D_BTN BTN_BACK       // 39
 #define HAS_C
 #define HAS_D
+#define L_PULL true
 #define C_PULL true
+#define U_PULL true
+#define R_PULL true
 #define D_PULL true
 
 // ---- Memory ----
