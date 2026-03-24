@@ -134,7 +134,7 @@ void backlightOff() {
 
 // ---- Touch Test Mode ----
 // Hold BTN_ENTER during boot to enter touch test (draws dots + coords)
-#ifdef HAS_CYD_TOUCH
+#if defined(HAS_CYD_TOUCH) && !defined(PRODUCTION_BUILD)
 void runTouchTest() {
   display_obj.tft.fillScreen(TFT_BLACK);
   display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -245,6 +245,7 @@ void setup() {
   // Initialize buzzer (GPIO 19)
   buzzerInit();
 
+  #ifndef PRODUCTION_BUILD
   // WiFi scan test: hold ENTER + BACK during boot (check combo FIRST)
   #if defined(HAS_SCREEN) && defined(HAS_BUTTONS)
   if (digitalRead(C_BTN) == LOW && digitalRead(D_BTN) == LOW) {
@@ -292,6 +293,7 @@ void setup() {
   else
   #endif
   { /* no test mode */ }
+  #endif // !PRODUCTION_BUILD
 
   settings_obj.begin();
   buffer_obj = Buffer();
