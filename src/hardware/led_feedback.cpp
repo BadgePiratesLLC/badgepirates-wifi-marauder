@@ -79,7 +79,7 @@ static void pattern_error() {
 void led_feedback_update() {
     // Rate-limit to ~30fps
     uint32_t now = millis();
-    if (now - lastUpdate < 33) return;
+    if (now - lastUpdate < 50) return;  // 20fps — prevents NeoPixel blocking from causing display flicker
     lastUpdate = now;
 
     // Auto-return from transient states
