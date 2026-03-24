@@ -163,7 +163,8 @@
 #define SNAP_LEN  (1 * 4096)
 
 // ---- Evil Portal ----
-#define MAX_HTML_SIZE 30000
+// Reduced from 30000 to 8192: saves ~22KB BSS for memory-constrained ESP32-S3 without PSRAM
+#define MAX_HTML_SIZE 8192
 
 // ---- MAC History (PSRAM available) ----
 #define mac_history_len      50
