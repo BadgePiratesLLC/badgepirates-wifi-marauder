@@ -35,7 +35,7 @@
 //   HAS_SD, USE_SD, HAS_PSRAM, HAS_IDF_3, HAS_GPS, HAS_SEPARATE_SD
 // Badge adds: HAS_NEOPIXEL_LED, HAS_BUTTONS, HAS_BATTERY
 // Badge removes: HAS_DUAL_BAND (single-band ESP32-S3), HAS_NIMBLE_2 (using NimBLE 1.4.x)
-#define HAS_PSRAM
+// #define HAS_PSRAM  // badge has no PSRAM — ps_malloc returns NULL → StoreProhibited crash
 #define HAS_GPS
 #define HAS_SEPARATE_SD
 // HAS_DUAL_BAND intentionally omitted — badge is single-band ESP32-S3
