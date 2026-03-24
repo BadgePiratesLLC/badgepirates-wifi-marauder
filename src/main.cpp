@@ -47,6 +47,7 @@
   #include "hardware/badge_menu.h"
 #endif
 #include "hardware/power_manager.h"
+#include "hardware/wifi_patch.h"
 
 // ---- Upstream global objects (must match esp32_marauder.ino externs) ----
 WiFiScan wifi_scan_obj;
@@ -366,6 +367,7 @@ void setup() {
 
   Serial.println(F("[BOOT] wifi_scan_obj.RunSetup()..."));
   Serial.flush();
+  patch_wifi_config_no_psram(&wifi_scan_obj.cfg);
   wifi_scan_obj.RunSetup();
   Serial.println(F("[BOOT] WiFi scan setup done"));
   Serial.flush();
