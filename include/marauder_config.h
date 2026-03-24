@@ -166,7 +166,7 @@
 #define MAX_HTML_SIZE 30000
 
 // ---- MAC History (PSRAM available) ----
-#define mac_history_len      500
+#define mac_history_len      50
 #define mac_history_len_half (mac_history_len / 2)
 
 // ---- Marauder Title ----
