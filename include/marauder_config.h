@@ -40,7 +40,8 @@
 #ifdef HAS_PSRAM
 #error "HAS_PSRAM is still defined! Config override failed!"
 #endif
-#define HAS_GPS
+// HAS_GPS intentionally disabled — badge has no GPS module, saves ~516B RAM + flash
+// #define HAS_GPS
 #define HAS_SEPARATE_SD
 // HAS_DUAL_BAND intentionally omitted — badge is single-band ESP32-S3
 
@@ -135,10 +136,10 @@
 #define PIN NEOPIXEL_PIN     // 18
 #define Pixels NEOPIXEL_COUNT // 6
 
-// ---- GPS (V8 defaults, adjust when hardware confirmed) ----
-#define GPS_SERIAL_INDEX 1
-#define GPS_TX 14
-#define GPS_RX 13
+// ---- GPS disabled (badge has no GPS module) ----
+// #define GPS_SERIAL_INDEX 1
+// #define GPS_TX 14
+// #define GPS_RX 13
 
 // ---- Battery (I2C fuel gauge on shared touch bus) ----
 #define I2C_SDA I2C_SDA_PIN  // 8

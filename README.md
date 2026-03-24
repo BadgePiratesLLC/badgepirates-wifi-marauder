@@ -2,7 +2,7 @@
 
 ESP32Marauder port for the BSidesKC ESP32-S3 conference badge.
 
-## 🎉 v1.0.0 — Hardware Validated
+## 🎉 v1.1.0 — Production Ready
 
 Firmware boots and runs on physical BSidesKC badges. All core subsystems verified: display, touch, encoder, WiFi scanning, NeoPixels, buzzer, and badge menu. See the [Hardware Validation Report](HARDWARE_VALIDATION_REPORT.md) for full details.
 
@@ -66,11 +66,19 @@ git submodule update --init
 
 # 3. Connect badge via USB-C
 
-# 4. Build and flash
+# 4. Build and flash (development)
 pio run --target upload
 
 # 5. Monitor serial output (optional)
 pio device monitor -b 115200
+```
+
+### Production Build
+
+For release firmware with debug logging stripped and optimized flash usage (~9.6KB savings):
+
+```bash
+pio run -e bsideskc_prod --target upload
 ```
 
 The status LED (GPIO 21) blinks 5× on boot to confirm firmware is running. The display shows the splash screen after ~3 seconds, then the Marauder menu.
@@ -107,8 +115,7 @@ Hold these buttons during power-on:
 
 | Issue | Severity | Workaround |
 |-------|----------|------------|
-| SD card not detected on boot | Medium | Use SPIFFS fallback; test with FAT32 card |
-| NeoPixel blocks interrupts briefly | Low | Rate-limited to 20fps; no visible flicker |
+| SD card not detected on boot | Medium | Use SPIFFS fallback; see [SD troubleshooting](docs/sd-card-troubleshooting.md) |
 | Touch debug logging on serial | Low | Cosmetic; remove `Serial.printf` in XPT2046 shim for release |
 | 3-second boot delay | Low | By design for USB serial stability |
 | No PSRAM | Info | Memory buffers reduced; mac_history=50, HTML=8KB |
@@ -152,6 +159,7 @@ Hold these buttons during power-on:
 
 | Document | Description |
 |----------|-------------|
+| [CHANGELOG.md](CHANGELOG.md) | Release history and version changes |
 | [HARDWARE_VALIDATION_REPORT.md](HARDWARE_VALIDATION_REPORT.md) | Boot fixes, serial output, performance metrics |
 | [HARDWARE_TESTING_CHECKLIST.md](HARDWARE_TESTING_CHECKLIST.md) | Hardware validation checklist with results |
 | [PROJECT_COMPLETION_REPORT.md](PROJECT_COMPLETION_REPORT.md) | Full project completion report |
@@ -159,6 +167,7 @@ Hold these buttons during power-on:
 | [USER_GUIDE.md](USER_GUIDE.md) | End user guide for badge operation |
 | [PORTING_PLAN.md](PORTING_PLAN.md) | Full porting plan and phase breakdown |
 | [GITHUB_ISSUES.md](GITHUB_ISSUES.md) | Issue tracker reference |
+| [SD Card Troubleshooting](docs/sd-card-troubleshooting.md) | SD card debugging and compatibility guide |
 
 ### Phase Documentation (in `docs/`)
 - [Phase 1](docs/phase1-summary.md) — Build system and project setup

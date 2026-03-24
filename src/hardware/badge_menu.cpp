@@ -133,11 +133,13 @@ void badgeMenuSetup() {
     showBatteryStatus();
   }});
 
-  // Hardware Test
+  // Hardware Test (dev builds only)
+  #ifndef PRODUCTION_BUILD
   TFT_eSPI_Button* btn4 = new TFT_eSPI_Button();
   badgeMenu.list->add(MenuNode{"Hardware Test", false, TFTCYAN, DEVICE_INFO, btn4, false, []() {
     runHwTest();
   }});
+  #endif
 
   // Insert "Badge" item into main menu (before Reboot which is last)
   int insertPos = mainMenu->list->size() - 1;  // before Reboot
