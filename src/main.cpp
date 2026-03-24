@@ -90,6 +90,7 @@ CommandLine cli_obj;
   SDInterface sd_obj;
 #endif
 
+// Note: PROGMEM on Arduino String is a no-op on ESP32, but kept for upstream compat
 const String PROGMEM version_number = MARAUDER_VERSION;
 
 // ---- Brightness functions (delegate to DisplayAdapter) ----
@@ -175,7 +176,7 @@ void setup() {
   #endif
   Serial.flush();
   #ifdef HAS_PSRAM
-    Serial.println("ERROR: HAS_PSRAM IS DEFINED!");
+    Serial.println(F("ERROR: HAS_PSRAM IS DEFINED!"));
   #endif
 
   disableCore0WDT();
@@ -274,7 +275,7 @@ void setup() {
     while (true) {
       if (encoder_turned_up())   { pos--; Serial.printf("[Enc] UP   pos=%d\n", pos); }
       if (encoder_turned_down()) { pos++; Serial.printf("[Enc] DOWN pos=%d\n", pos); }
-      if (encoder_button_pressed()) { Serial.println("[Enc] BUTTON"); }
+      if (encoder_button_pressed()) { Serial.println(F("[Enc] BUTTON")); }
       display_obj.tft.fillRect(0, 80, TFT_WIDTH, 40, TFT_BLACK);
       display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
       display_obj.tft.drawCentreString("Pos: " + String(pos), TFT_WIDTH / 2, 90, 2);
