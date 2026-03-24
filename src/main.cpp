@@ -176,43 +176,22 @@ void setup() {
   Serial.flush();
   #ifdef HAS_PSRAM
     Serial.println("ERROR: HAS_PSRAM IS DEFINED!");
-  #else
-    Serial.println("[BOOT] HAS_PSRAM is NOT defined (correct)");
   #endif
-
-  Serial.println(F("\n\n===== BOOT DEBUG START ====="));
-  Serial.printf("[BOOT] Reset reason CPU0: %d\n", rtc_get_reset_reason(0));
-  Serial.printf("[BOOT] Free heap: %u\n", ESP.getFreeHeap());
-  Serial.flush();
 
   disableCore0WDT();
   disableCore1WDT();
-  Serial.println(F("[BOOT] Watchdogs disabled"));
-  Serial.flush();
 
   randomSeed(esp_random());
-  Serial.println(F("[BOOT] randomSeed done"));
-  Serial.flush();
-
-  esp_log_level_set("*", ESP_LOG_VERBOSE);
-  Serial.println(F("[BOOT] Log level set to VERBOSE"));
-  Serial.flush();
 
   Serial.println(F("[BSidesKC] Booting ESP32 Marauder..."));
 
   #ifdef HAS_SCREEN
     pinMode(TFT_BL, OUTPUT);
-    Serial.println(F("[BOOT] TFT_BL pin set"));
-    Serial.flush();
   #endif
   backlightOff();
-  Serial.println(F("[BOOT] Backlight off"));
-  Serial.flush();
 
   #ifdef HAS_SCREEN
     digitalWrite(TFT_CS, HIGH);
-    Serial.println(F("[BOOT] TFT_CS high"));
-    Serial.flush();
   #endif
 
   #if defined(HAS_SD)
@@ -220,22 +199,16 @@ void setup() {
     delay(10);
     digitalWrite(SD_CS, HIGH);
     delay(10);
-    Serial.println(F("[BOOT] SD_CS high"));
-    Serial.flush();
   #endif
 
   // PSRAM disabled — likely cause of RTC_SW_SYS_RST boot loop on ESP32-S3
   #ifdef HAS_PSRAM
-    Serial.println(F("[BOOT] *** PSRAM init SKIPPED (commented out for debug) ***"));
-    Serial.flush();
     // if (!psramInit())
     //   Serial.println(F("PSRAM not available"));
   #endif
 
   #ifdef HAS_SIMPLEX_DISPLAY
     #ifdef HAS_SD
-      Serial.println(F("[BOOT] Simplex SD init..."));
-      Serial.flush();
       if (!sd_obj.initSD())
         Serial.println(F("SD Card NOT Supported"));
     #endif
@@ -243,16 +216,9 @@ void setup() {
 
   // Display init — upstream RunSetup handles tft.init() + rotation + clear
   #ifdef HAS_SCREEN
-    Serial.println(F("[BOOT] display_obj.RunSetup()..."));
-    Serial.flush();
     if (&display_obj != nullptr) {
       display_obj.RunSetup();
-      Serial.println(F("[BOOT] display RunSetup done"));
-      Serial.flush();
       display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    } else {
-      Serial.println(F("[BOOT] ERROR: display_obj is null!"));
-      Serial.flush();
     }
   #endif
 
@@ -405,7 +371,8 @@ void setup() {
   Serial.println(F("[BOOT] led_feedback_init..."));
   Serial.flush();
   led_feedback_init();
-  Serial.println(F("[BOOT] LED feedback done"));
+  led_feedback_start_task();
+  Serial.println(F("[BOOT] LED feedback done (Core 0 task)"));
   Serial.flush();
 
   #ifdef HAS_GPS
@@ -542,7 +509,7 @@ void loop() {
     if (mode != WIFI_SCAN_OFF && mode != WIFI_CONNECTED)
       powerManagerResetActivity();
   }
-  led_feedback_update();
+  // led_feedback_update() now runs on Core 0 task
 
   // Power management: auto-dim and auto-sleep
   powerManagerUpdate(currentTime);
