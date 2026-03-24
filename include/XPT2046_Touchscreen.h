@@ -34,19 +34,27 @@ public:
         return getTouchController().read_td_status() > 0;
     }
 
-    // Return raw touch coordinates.
-    // Upstream CYD path maps these with map() in Display::updateTouch.
-    // We return values pre-scaled to match the expected 200-3700 / 240-3800
-    // range so the existing map() calls in Display.cpp produce correct screen coords.
+    // Return touch coordinates scaled to fake XPT2046 ADC range.
+    // Display::updateTouch() reads tft.getRotation() and applies the
+    // appropriate map() to convert these back to screen pixels.
+    //
+    // Upstream case 1 (landscape) does:
+    //   screen_x = map(p.y, 143, 3715, 0, TFT_HEIGHT)
+    //   screen_y = map(p.x, 3786, 216, 0, TFT_WIDTH)
+    //
+    // So p.y must span 143–3715 and p.x must span 216–3786.
     TS_Point getPoint() {
         FT6336U& ft = getTouchController();
         uint16_t rx = ft.read_touch1_x();
         uint16_t ry = ft.read_touch1_y();
 
-        // FT6336U returns 0-239 (X) and 0-319 (Y) in portrait.
-        // Scale to the resistive-touch ADC range that Display.cpp map() expects.
-        int16_t sx = map(rx, 0, 239, 200, 3700);
-        int16_t sy = map(ry, 0, 319, 240, 3800);
+        // FT6336U returns 0-239 (X) and 0-319 (Y) in native portrait.
+        // Map to the exact ADC ranges upstream case 1 expects.
+        int16_t sx = map(rx, 0, 239, 216, 3786);
+        int16_t sy = map(ry, 0, 319, 143, 3715);
+
+        Serial.printf("[Touch] raw FT6336U x=%d y=%d → mapped sx=%d sy=%d\n",
+                      rx, ry, sx, sy);
 
         return TS_Point(sx, sy, 100); // z=100 indicates pressed
     }

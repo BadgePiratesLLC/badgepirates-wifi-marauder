@@ -36,6 +36,10 @@
 // Badge adds: HAS_NEOPIXEL_LED, HAS_BUTTONS, HAS_BATTERY
 // Badge removes: HAS_DUAL_BAND (single-band ESP32-S3), HAS_NIMBLE_2 (using NimBLE 1.4.x)
 // #define HAS_PSRAM  // badge has no PSRAM — ps_malloc returns NULL → StoreProhibited crash
+#undef HAS_PSRAM
+#ifdef HAS_PSRAM
+#error "HAS_PSRAM is still defined! Config override failed!"
+#endif
 #define HAS_GPS
 #define HAS_SEPARATE_SD
 // HAS_DUAL_BAND intentionally omitted — badge is single-band ESP32-S3
@@ -74,7 +78,7 @@
 #define EXT_BUTTON_WIDTH    30
 #define SCREEN_BUFFER
 #define MAX_SCREEN_BUFFER   21
-#define SCREEN_ORIENTATION  0
+#define SCREEN_ORIENTATION  1  // Landscape (320×240)
 
 #define CHAR_WIDTH          12
 #define SCREEN_WIDTH        TFT_WIDTH
