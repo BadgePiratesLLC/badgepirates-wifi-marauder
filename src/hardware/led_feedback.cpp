@@ -5,10 +5,9 @@ static Adafruit_NeoPixel pixels(NEOPIXEL_COUNT, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ8
 static Adafruit_NeoPixel statusLed(STATUS_LED_COUNT, STATUS_LED_PIN, NEO_GRB + NEO_KHZ800);
 static uint8_t ledBrightness = 33;
 
-static LedState currentState = LED_IDLE;
-static LedState prevState = LED_IDLE;
-static uint32_t lastUpdate = 0;
-static uint32_t flashStart = 0;
+static volatile LedState currentState = LED_IDLE;
+static volatile LedState prevState = LED_IDLE;
+static volatile uint32_t flashStart = 0;
 static const uint32_t FLASH_DURATION = 600;
 
 void led_feedback_init() {
@@ -76,28 +75,33 @@ static void pattern_error() {
     statusLed.setPixelColor(0, on ? statusLed.Color(255, 0, 0) : 0);
 }
 
-void led_feedback_update() {
-    // Rate-limit to ~30fps
-    uint32_t now = millis();
-    if (now - lastUpdate < 50) return;  // 20fps — prevents NeoPixel blocking from causing display flicker
-    lastUpdate = now;
+static void led_task(void* param) {
+    for (;;) {
+        uint32_t now = millis();
 
-    // Auto-return from transient states
-    if ((currentState == LED_CAPTURE_OK || currentState == LED_ERROR) &&
-        (now - flashStart > FLASH_DURATION)) {
-        currentState = prevState;
+        // Auto-return from transient states
+        if ((currentState == LED_CAPTURE_OK || currentState == LED_ERROR) &&
+            (now - flashStart > FLASH_DURATION)) {
+            currentState = prevState;
+        }
+
+        switch (currentState) {
+            case LED_IDLE:       pattern_idle(); break;
+            case LED_SCANNING:   pattern_scanning(); break;
+            case LED_ATTACK:     pattern_attack(); break;
+            case LED_CAPTURE_OK: pattern_capture_ok(); break;
+            case LED_ERROR:      pattern_error(); break;
+        }
+
+        pixels.show();
+        statusLed.show();
+
+        vTaskDelay(pdMS_TO_TICKS(50));  // 20fps
     }
+}
 
-    switch (currentState) {
-        case LED_IDLE:       pattern_idle(); break;
-        case LED_SCANNING:   pattern_scanning(); break;
-        case LED_ATTACK:     pattern_attack(); break;
-        case LED_CAPTURE_OK: pattern_capture_ok(); break;
-        case LED_ERROR:      pattern_error(); break;
-    }
-
-    pixels.show();
-    statusLed.show();
+void led_feedback_start_task() {
+    xTaskCreatePinnedToCore(led_task, "led", 2048, NULL, 1, NULL, 0);
 }
 
 void led_feedback_set_brightness(uint8_t brightness) {

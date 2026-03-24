@@ -90,6 +90,7 @@ CommandLine cli_obj;
   SDInterface sd_obj;
 #endif
 
+// Note: PROGMEM on Arduino String is a no-op on ESP32, but kept for upstream compat
 const String PROGMEM version_number = MARAUDER_VERSION;
 
 // ---- Brightness functions (delegate to DisplayAdapter) ----
@@ -134,7 +135,7 @@ void backlightOff() {
 
 // ---- Touch Test Mode ----
 // Hold BTN_ENTER during boot to enter touch test (draws dots + coords)
-#ifdef HAS_CYD_TOUCH
+#if defined(HAS_CYD_TOUCH) && !defined(PRODUCTION_BUILD)
 void runTouchTest() {
   display_obj.tft.fillScreen(TFT_BLACK);
   display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -175,44 +176,23 @@ void setup() {
   #endif
   Serial.flush();
   #ifdef HAS_PSRAM
-    Serial.println("ERROR: HAS_PSRAM IS DEFINED!");
-  #else
-    Serial.println("[BOOT] HAS_PSRAM is NOT defined (correct)");
+    Serial.println(F("ERROR: HAS_PSRAM IS DEFINED!"));
   #endif
-
-  Serial.println(F("\n\n===== BOOT DEBUG START ====="));
-  Serial.printf("[BOOT] Reset reason CPU0: %d\n", rtc_get_reset_reason(0));
-  Serial.printf("[BOOT] Free heap: %u\n", ESP.getFreeHeap());
-  Serial.flush();
 
   disableCore0WDT();
   disableCore1WDT();
-  Serial.println(F("[BOOT] Watchdogs disabled"));
-  Serial.flush();
 
   randomSeed(esp_random());
-  Serial.println(F("[BOOT] randomSeed done"));
-  Serial.flush();
-
-  esp_log_level_set("*", ESP_LOG_VERBOSE);
-  Serial.println(F("[BOOT] Log level set to VERBOSE"));
-  Serial.flush();
 
   Serial.println(F("[BSidesKC] Booting ESP32 Marauder..."));
 
   #ifdef HAS_SCREEN
     pinMode(TFT_BL, OUTPUT);
-    Serial.println(F("[BOOT] TFT_BL pin set"));
-    Serial.flush();
   #endif
   backlightOff();
-  Serial.println(F("[BOOT] Backlight off"));
-  Serial.flush();
 
   #ifdef HAS_SCREEN
     digitalWrite(TFT_CS, HIGH);
-    Serial.println(F("[BOOT] TFT_CS high"));
-    Serial.flush();
   #endif
 
   #if defined(HAS_SD)
@@ -220,22 +200,16 @@ void setup() {
     delay(10);
     digitalWrite(SD_CS, HIGH);
     delay(10);
-    Serial.println(F("[BOOT] SD_CS high"));
-    Serial.flush();
   #endif
 
   // PSRAM disabled — likely cause of RTC_SW_SYS_RST boot loop on ESP32-S3
   #ifdef HAS_PSRAM
-    Serial.println(F("[BOOT] *** PSRAM init SKIPPED (commented out for debug) ***"));
-    Serial.flush();
     // if (!psramInit())
     //   Serial.println(F("PSRAM not available"));
   #endif
 
   #ifdef HAS_SIMPLEX_DISPLAY
     #ifdef HAS_SD
-      Serial.println(F("[BOOT] Simplex SD init..."));
-      Serial.flush();
       if (!sd_obj.initSD())
         Serial.println(F("SD Card NOT Supported"));
     #endif
@@ -243,62 +217,36 @@ void setup() {
 
   // Display init — upstream RunSetup handles tft.init() + rotation + clear
   #ifdef HAS_SCREEN
-    Serial.println(F("[BOOT] display_obj.RunSetup()..."));
-    Serial.flush();
     if (&display_obj != nullptr) {
       display_obj.RunSetup();
-      Serial.println(F("[BOOT] display RunSetup done"));
-      Serial.flush();
       display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    } else {
-      Serial.println(F("[BOOT] ERROR: display_obj is null!"));
-      Serial.flush();
     }
   #endif
 
   // Badge backlight PWM init (after display so ledcAttach overrides TFT_eSPI's pinMode)
-  Serial.println(F("[BOOT] brightnessInit..."));
-  Serial.flush();
   brightnessInit();
   backlightOff();
-  Serial.println(F("[BOOT] Brightness init done"));
-  Serial.flush();
 
   #ifdef HAS_SCREEN
     display_obj.tft.drawCentreString("BSidesKC Badge", TFT_WIDTH / 2, TFT_HEIGHT * 0.25, 1);
     display_obj.tft.drawCentreString("ESP32 Marauder", TFT_WIDTH / 2, TFT_HEIGHT * 0.40, 1);
     display_obj.tft.drawCentreString(display_obj.version_number, TFT_WIDTH / 2, TFT_HEIGHT * 0.55, 1);
-    Serial.println(F("[BOOT] Splash screen drawn"));
-    Serial.flush();
   #endif
 
   backlightOn();
-  Serial.println(F("[BOOT] Backlight on"));
-  Serial.flush();
 
   // Initialize badge button handler (BOOT pin; ENTER/BACK handled by Switches)
   #ifdef HAS_BUTTONS
-    Serial.println(F("[BOOT] buttonHandlerInit..."));
-    Serial.flush();
     buttonHandlerInit();
-    Serial.println(F("[BOOT] Button handler done"));
-    Serial.flush();
   #endif
 
   // Initialize rotary encoder (A:45, B:48, Button:20)
-  Serial.println(F("[BOOT] encoder_init..."));
-  Serial.flush();
   encoder_init();
-  Serial.println(F("[BOOT] Rotary encoder initialized"));
-  Serial.flush();
 
   // Initialize buzzer (GPIO 19)
-  Serial.println(F("[BOOT] buzzerInit..."));
-  Serial.flush();
   buzzerInit();
-  Serial.println(F("[BOOT] Buzzer done"));
-  Serial.flush();
 
+  #ifndef PRODUCTION_BUILD
   // WiFi scan test: hold ENTER + BACK during boot (check combo FIRST)
   #if defined(HAS_SCREEN) && defined(HAS_BUTTONS)
   if (digitalRead(C_BTN) == LOW && digitalRead(D_BTN) == LOW) {
@@ -327,7 +275,7 @@ void setup() {
     while (true) {
       if (encoder_turned_up())   { pos--; Serial.printf("[Enc] UP   pos=%d\n", pos); }
       if (encoder_turned_down()) { pos++; Serial.printf("[Enc] DOWN pos=%d\n", pos); }
-      if (encoder_button_pressed()) { Serial.println("[Enc] BUTTON"); }
+      if (encoder_button_pressed()) { Serial.println(F("[Enc] BUTTON")); }
       display_obj.tft.fillRect(0, 80, TFT_WIDTH, 40, TFT_BLACK);
       display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
       display_obj.tft.drawCentreString("Pos: " + String(pos), TFT_WIDTH / 2, 90, 2);
@@ -346,99 +294,56 @@ void setup() {
   else
   #endif
   { /* no test mode */ }
+  #endif // !PRODUCTION_BUILD
 
   settings_obj.begin();
-  Serial.println(F("[BOOT] settings_obj.begin() done"));
-  Serial.flush();
   buffer_obj = Buffer();
-  Serial.println(F("[BOOT] buffer_obj done"));
-  Serial.flush();
 
   #ifndef HAS_SIMPLEX_DISPLAY
     #ifdef HAS_SD
-      Serial.println(F("[BOOT] SD init..."));
-      Serial.flush();
       if (!sd_obj.initSD())
         Serial.println(F("SD Card NOT Supported"));
-      Serial.println(F("[BOOT] SD init done"));
-      Serial.flush();
     #endif
   #endif
 
-  Serial.println(F("[BOOT] wifi_scan_obj.RunSetup()..."));
-  Serial.flush();
   patch_wifi_config_no_psram(&wifi_scan_obj.cfg);
   wifi_scan_obj.RunSetup();
-  Serial.println(F("[BOOT] WiFi scan setup done"));
-  Serial.flush();
 
   #ifdef HAS_SCREEN
     display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
     display_obj.tft.drawCentreString("Initializing...", TFT_WIDTH / 2, TFT_HEIGHT * 0.70, 1);
   #endif
 
-  Serial.println(F("[BOOT] evil_portal_obj.setup()..."));
-  Serial.flush();
   evil_portal_obj.setup();
-  Serial.println(F("[BOOT] Evil portal done"));
-  Serial.flush();
 
   #ifdef HAS_BATTERY
-    Serial.println(F("[BOOT] battery_obj.RunSetup()..."));
-    Serial.flush();
     battery_obj.RunSetup();
     battery_obj.battery_level = battery_obj.getBatteryLevel();
     batteryMonitorInit();
-    Serial.println(F("[BOOT] Battery done"));
-    Serial.flush();
   #endif
 
   #ifdef HAS_NEOPIXEL_LED
-    Serial.println(F("[BOOT] led_obj.RunSetup()..."));
-    Serial.flush();
     led_obj.RunSetup();
-    Serial.println(F("[BOOT] LED done"));
-    Serial.flush();
   #endif
 
   // Badge NeoPixel feedback (6× ring + status LED)
-  Serial.println(F("[BOOT] led_feedback_init..."));
-  Serial.flush();
   led_feedback_init();
-  Serial.println(F("[BOOT] LED feedback done"));
-  Serial.flush();
+  led_feedback_start_task();
 
   #ifdef HAS_GPS
-    Serial.println(F("[BOOT] gps_obj.begin()..."));
-    Serial.flush();
     gps_obj.begin();
-    Serial.println(F("[BOOT] GPS done"));
-    Serial.flush();
   #endif
 
   #ifdef HAS_SCREEN
-    Serial.println(F("[BOOT] menu_function_obj.RunSetup()..."));
-    Serial.flush();
     display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
     menu_function_obj.RunSetup();
-    Serial.println(F("[BOOT] Menu setup done"));
-    Serial.flush();
-    Serial.println(F("[BOOT] badgeMenuSetup()..."));
-    Serial.flush();
     badgeMenuSetup();
-    Serial.println(F("[BOOT] Badge menu done"));
-    Serial.flush();
   #endif
 
   wifi_scan_obj.StartScan(WIFI_SCAN_OFF);
   cli_obj.RunSetup();
-  Serial.println(F("[BOOT] CLI setup done"));
-  Serial.flush();
 
-  Serial.printf("[BOOT] Free heap at end: %u\n", ESP.getFreeHeap());
   Serial.println(F("[BSidesKC] Marauder ready."));
-  Serial.println(F("===== BOOT DEBUG END ====="));
-  Serial.flush();
 
   // Initialize power management (auto-sleep, backlight dimming)
   powerManagerInit();
@@ -542,7 +447,7 @@ void loop() {
     if (mode != WIFI_SCAN_OFF && mode != WIFI_CONNECTED)
       powerManagerResetActivity();
   }
-  led_feedback_update();
+  // led_feedback_update() now runs on Core 0 task
 
   // Power management: auto-dim and auto-sleep
   powerManagerUpdate(currentTime);

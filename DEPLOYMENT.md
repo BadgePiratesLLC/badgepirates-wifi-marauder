@@ -14,6 +14,8 @@
 
 ## Building Firmware
 
+### Development Build
+
 ```bash
 # Clone repository
 git clone https://github.com/BadgePiratesLLC/badgepirates-wifi-marauder.git
@@ -24,6 +26,22 @@ pio run -e bsideskc-badge
 
 # Output binary: .pio/build/bsideskc-badge/firmware.bin
 ```
+
+### Production Build
+
+Use the production environment for conference deployment. It enables `-Os` optimization, disables assertions (`-DNDEBUG`), and strips boot-time test modes.
+
+```bash
+# Build production firmware
+pio run -e bsideskc-badge-production
+
+# Output binary: .pio/build/bsideskc-badge-production/firmware.bin
+```
+
+Production build differences:
+- `-Os` size optimization (smaller binary)
+- `-DNDEBUG` disables `assert()` calls
+- `-DPRODUCTION_BUILD` removes boot-time hardware test modes and Hardware Test menu item
 
 ### Build Verification
 
