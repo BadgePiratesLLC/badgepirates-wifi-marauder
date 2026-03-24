@@ -223,47 +223,27 @@ void setup() {
   #endif
 
   // Badge backlight PWM init (after display so ledcAttach overrides TFT_eSPI's pinMode)
-  Serial.println(F("[BOOT] brightnessInit..."));
-  Serial.flush();
   brightnessInit();
   backlightOff();
-  Serial.println(F("[BOOT] Brightness init done"));
-  Serial.flush();
 
   #ifdef HAS_SCREEN
     display_obj.tft.drawCentreString("BSidesKC Badge", TFT_WIDTH / 2, TFT_HEIGHT * 0.25, 1);
     display_obj.tft.drawCentreString("ESP32 Marauder", TFT_WIDTH / 2, TFT_HEIGHT * 0.40, 1);
     display_obj.tft.drawCentreString(display_obj.version_number, TFT_WIDTH / 2, TFT_HEIGHT * 0.55, 1);
-    Serial.println(F("[BOOT] Splash screen drawn"));
-    Serial.flush();
   #endif
 
   backlightOn();
-  Serial.println(F("[BOOT] Backlight on"));
-  Serial.flush();
 
   // Initialize badge button handler (BOOT pin; ENTER/BACK handled by Switches)
   #ifdef HAS_BUTTONS
-    Serial.println(F("[BOOT] buttonHandlerInit..."));
-    Serial.flush();
     buttonHandlerInit();
-    Serial.println(F("[BOOT] Button handler done"));
-    Serial.flush();
   #endif
 
   // Initialize rotary encoder (A:45, B:48, Button:20)
-  Serial.println(F("[BOOT] encoder_init..."));
-  Serial.flush();
   encoder_init();
-  Serial.println(F("[BOOT] Rotary encoder initialized"));
-  Serial.flush();
 
   // Initialize buzzer (GPIO 19)
-  Serial.println(F("[BOOT] buzzerInit..."));
-  Serial.flush();
   buzzerInit();
-  Serial.println(F("[BOOT] Buzzer done"));
-  Serial.flush();
 
   // WiFi scan test: hold ENTER + BACK during boot (check combo FIRST)
   #if defined(HAS_SCREEN) && defined(HAS_BUTTONS)
@@ -314,98 +294,53 @@ void setup() {
   { /* no test mode */ }
 
   settings_obj.begin();
-  Serial.println(F("[BOOT] settings_obj.begin() done"));
-  Serial.flush();
   buffer_obj = Buffer();
-  Serial.println(F("[BOOT] buffer_obj done"));
-  Serial.flush();
 
   #ifndef HAS_SIMPLEX_DISPLAY
     #ifdef HAS_SD
-      Serial.println(F("[BOOT] SD init..."));
-      Serial.flush();
       if (!sd_obj.initSD())
         Serial.println(F("SD Card NOT Supported"));
-      Serial.println(F("[BOOT] SD init done"));
-      Serial.flush();
     #endif
   #endif
 
-  Serial.println(F("[BOOT] wifi_scan_obj.RunSetup()..."));
-  Serial.flush();
   patch_wifi_config_no_psram(&wifi_scan_obj.cfg);
   wifi_scan_obj.RunSetup();
-  Serial.println(F("[BOOT] WiFi scan setup done"));
-  Serial.flush();
 
   #ifdef HAS_SCREEN
     display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
     display_obj.tft.drawCentreString("Initializing...", TFT_WIDTH / 2, TFT_HEIGHT * 0.70, 1);
   #endif
 
-  Serial.println(F("[BOOT] evil_portal_obj.setup()..."));
-  Serial.flush();
   evil_portal_obj.setup();
-  Serial.println(F("[BOOT] Evil portal done"));
-  Serial.flush();
 
   #ifdef HAS_BATTERY
-    Serial.println(F("[BOOT] battery_obj.RunSetup()..."));
-    Serial.flush();
     battery_obj.RunSetup();
     battery_obj.battery_level = battery_obj.getBatteryLevel();
     batteryMonitorInit();
-    Serial.println(F("[BOOT] Battery done"));
-    Serial.flush();
   #endif
 
   #ifdef HAS_NEOPIXEL_LED
-    Serial.println(F("[BOOT] led_obj.RunSetup()..."));
-    Serial.flush();
     led_obj.RunSetup();
-    Serial.println(F("[BOOT] LED done"));
-    Serial.flush();
   #endif
 
   // Badge NeoPixel feedback (6× ring + status LED)
-  Serial.println(F("[BOOT] led_feedback_init..."));
-  Serial.flush();
   led_feedback_init();
   led_feedback_start_task();
-  Serial.println(F("[BOOT] LED feedback done (Core 0 task)"));
-  Serial.flush();
 
   #ifdef HAS_GPS
-    Serial.println(F("[BOOT] gps_obj.begin()..."));
-    Serial.flush();
     gps_obj.begin();
-    Serial.println(F("[BOOT] GPS done"));
-    Serial.flush();
   #endif
 
   #ifdef HAS_SCREEN
-    Serial.println(F("[BOOT] menu_function_obj.RunSetup()..."));
-    Serial.flush();
     display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
     menu_function_obj.RunSetup();
-    Serial.println(F("[BOOT] Menu setup done"));
-    Serial.flush();
-    Serial.println(F("[BOOT] badgeMenuSetup()..."));
-    Serial.flush();
     badgeMenuSetup();
-    Serial.println(F("[BOOT] Badge menu done"));
-    Serial.flush();
   #endif
 
   wifi_scan_obj.StartScan(WIFI_SCAN_OFF);
   cli_obj.RunSetup();
-  Serial.println(F("[BOOT] CLI setup done"));
-  Serial.flush();
 
-  Serial.printf("[BOOT] Free heap at end: %u\n", ESP.getFreeHeap());
   Serial.println(F("[BSidesKC] Marauder ready."));
-  Serial.println(F("===== BOOT DEBUG END ====="));
-  Serial.flush();
 
   // Initialize power management (auto-sleep, backlight dimming)
   powerManagerInit();

@@ -53,9 +53,6 @@ public:
         int16_t sx = map(rx, 0, 239, 216, 3786);
         int16_t sy = map(ry, 0, 319, 143, 3715);
 
-        Serial.printf("[Touch] raw FT6336U x=%d y=%d → mapped sx=%d sy=%d\n",
-                      rx, ry, sx, sy);
-
         return TS_Point(sx, sy, 100); // z=100 indicates pressed
     }
 };
