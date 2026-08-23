@@ -194,8 +194,16 @@ Hold these buttons during power-on:
 - Hardware-dependent changes should include test procedures
 
 ## Based On
-- [ESP32Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
-- [QACode_27](https://github.com/BadgePiratesLLC/QACode_27) badge firmware by BadgePiratesLLC
+This is a port of [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder)
+by [justcallmekoko](https://github.com/justcallmekoko) to the BSidesKC
+ESP32-S3 badge, built on top of
+[QACode_27](https://github.com/BadgePiratesLLC/QACode_27) badge firmware by
+BadgePiratesLLC. The `esp32marauder-upstream` git submodule pulls in the
+upstream project's source directly; this repo's own code is the badge
+integration layer (display/touch/menu/hardware glue) around it.
 
 ## License
-See upstream ESP32Marauder license.
+MIT — see [LICENSE](LICENSE). Same license as upstream ESP32 Marauder.
+
+This build also links two LGPL-3.0 libraries (ESPAsyncWebServer, AsyncTCP)
+for the Evil Portal feature — see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
