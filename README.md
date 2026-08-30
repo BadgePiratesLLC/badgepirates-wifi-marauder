@@ -1,6 +1,17 @@
 # BSidesKC Badge WiFi Marauder
 
-ESP32Marauder port for the BSidesKC ESP32-S3 conference badge.
+ESP32Marauder port for the BadgePirates ESP32-S3 conference badges.
+
+## Badge Compatibility
+
+| Badge | Hardware | Display | Status |
+|-------|----------|---------|--------|
+| CC14 | Compatible | Works | ✅ Supported |
+| BSidesKC26 | Compatible | Works | ✅ Supported |
+| CC13 | Compatible | **Does not work** | ⚠️ Known issue — see below |
+| BSidesKC25 | Compatible | **Does not work** | ⚠️ Known issue — see below |
+
+**Known issue — CC13 / BSidesKC25 display:** On these two badge years, the screen was mounted on the *back* of the board instead of the front. The panel is physically inverted relative to what this firmware's display init expects, so the screen stays blank. WiFi, BLE, the radio attacks, buttons, and everything else that doesn't touch the display should work normally on this hardware — it's a display-orientation bug, not a broken badge. A fix (most likely a rotation/mirror flip in display init, possibly a pin remap — to be confirmed against the CC13 schematic) is planned but **not yet written**. Tracked separately; see [GITHUB_ISSUES.md](GITHUB_ISSUES.md) or the linked issue once filed.
 
 ## 🎉 v1.1.0 — Production Ready
 
