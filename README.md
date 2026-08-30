@@ -6,12 +6,12 @@ ESP32Marauder port for the BadgePirates ESP32-S3 conference badges.
 
 | Badge | Hardware | Display | Status |
 |-------|----------|---------|--------|
-| CC14 | Compatible | Works | ✅ Supported |
-| BSidesKC26 | Compatible | Works | ✅ Supported |
-| CC13 | Compatible | **Does not work** | ⚠️ Known issue — see below |
-| BSidesKC25 | Compatible | **Does not work** | ⚠️ Known issue — see below |
+| CC14 | Compatible | Works | ✅ Supported — build with `env:bsideskc-badge` |
+| BSidesKC26 | Compatible | Works | ✅ Supported — build with `env:bsideskc-badge` |
+| CC13 | Compatible | Fix implemented, **pending physical validation** | ⚠️ Build with `env:bsideskc-badge-cc13` — see below |
+| BSidesKC25 | Compatible | Fix implemented, **pending physical validation** | ⚠️ Build with `env:bsideskc-badge-cc13` — see below |
 
-**Known issue — CC13 / BSidesKC25 display:** On these two badge years, the screen was mounted on the *back* of the board instead of the front. The panel is physically inverted relative to what this firmware's display init expects, so the screen stays blank. WiFi, BLE, the radio attacks, buttons, and everything else that doesn't touch the display should work normally on this hardware — it's a display-orientation bug, not a broken badge. A fix (most likely a rotation/mirror flip in display init, possibly a pin remap — to be confirmed against the CC13 schematic) is planned but **not yet written**. Tracked separately; see [GITHUB_ISSUES.md](GITHUB_ISSUES.md) or the linked issue once filed.
+**CC13 / BSidesKC25 display — orientation fix (Nexus 2977d950):** On these two badge years, the screen was mounted on the *back* of the board instead of the front, so the panel is physically rotated 180° relative to CC14/BSidesKC26. Confirmed against the CC13 schematic (`BadgePiratesLLC/Project-CC13`, `CAD/Screens.kicad_sch`) that this is orientation-only — all 11 display/touch GPIOs match `include/bsideskc_pins.h` exactly, no pin remap. The fix is a `BADGE_HW_CC13` build flag (new `env:bsideskc-badge-cc13` PlatformIO environment) that flips `SCREEN_ORIENTATION` to TFT_eSPI rotation 3 (180°-flipped landscape) and mirrors the FT6336U touch-coordinate mapping in `include/XPT2046_Touchscreen.h` to match. CC14/BSidesKC26 (`env:bsideskc-badge`) is untouched. **Not yet validated on physical CC13/BSidesKC25 hardware** — the touch mirroring math was derived from upstream's existing rotation-3 formula but needs an on-badge tap-accuracy check before this is called done.
 
 ## 🎉 v1.1.0 — Production Ready
 

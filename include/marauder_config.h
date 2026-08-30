@@ -79,7 +79,15 @@
 #define EXT_BUTTON_WIDTH    30
 #define SCREEN_BUFFER
 #define MAX_SCREEN_BUFFER   21
-#define SCREEN_ORIENTATION  1  // Landscape (320×240)
+#ifdef BADGE_HW_CC13
+  // CC13/BSidesKC25: screen moved to the back of the board — mounted rotated
+  // 180° vs CC14/BSidesKC26. Pins are identical (Nexus 2977d950); rotation 3
+  // is TFT_eSPI's 180°-flipped landscape. Touch mapping in
+  // include/XPT2046_Touchscreen.h is mirrored to match.
+  #define SCREEN_ORIENTATION 3  // Landscape, 180° flipped (320×240)
+#else
+  #define SCREEN_ORIENTATION  1  // Landscape (320×240)
+#endif
 
 #define CHAR_WIDTH          12
 #define SCREEN_WIDTH        TFT_WIDTH
