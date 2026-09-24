@@ -61,8 +61,8 @@ public:
 #ifdef BADGE_HW_CC13
         // Map to the exact ADC ranges upstream case 3 expects (mirrored
         // vs CC14's case 1 ranges below).
-        int16_t sx = map(rx, 0, 239, 200, 3700);
-        int16_t sy = map(ry, 0, 319, 240, 3800);
+        int16_t sx = map(rx, 0, 239, 3786, 216);   // endpoints REVERSED for the 180-deg panel
+        int16_t sy = map(ry, 0, 319, 3715, 143);   // endpoints REVERSED for the 180-deg panel
 #else
         // Map to the exact ADC ranges upstream case 1 expects.
         int16_t sx = map(rx, 0, 239, 216, 3786);
