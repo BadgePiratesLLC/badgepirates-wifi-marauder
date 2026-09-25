@@ -64,7 +64,7 @@ static Menu* s_mainMenu = nullptr;
 // ---------------------------------------------------------------------
 
 static const UiRect kBackRect = {0, 0, THEME_BACK_W, THEME_BACK_H};
-static const UiRect kGearRect = {TFT_WIDTH - THEME_GEAR_W, 0, THEME_GEAR_W, THEME_STATUSBAR_H};
+static const UiRect kGearRect = {THEME_SCREEN_W - THEME_GEAR_W, 0, THEME_GEAR_W, THEME_STATUSBAR_H};
 static const uint8_t ZONE_BACK = 250;  // reserved ids, screens use 0..N for their own controls
 static const uint8_t ZONE_GEAR = 249;
 
@@ -111,7 +111,7 @@ static lv_obj_t* lvScreen() {
     s_lvContent = lv_obj_create(s_lvScreen);
     lv_obj_remove_flag(s_lvContent, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_pos(s_lvContent, 0, THEME_STATUSBAR_H);
-    lv_obj_set_size(s_lvContent, TFT_WIDTH, TFT_HEIGHT - THEME_STATUSBAR_H);
+    lv_obj_set_size(s_lvContent, THEME_SCREEN_W, THEME_SCREEN_H - THEME_STATUSBAR_H);
     lv_obj_set_style_bg_opa(s_lvContent, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_lvContent, 0, 0);
     lv_obj_set_style_pad_all(s_lvContent, 0, 0);
@@ -267,7 +267,7 @@ static void adaptedRebuildBody(Menu* menu) {
 static int adaptedMaxVisible(bool isRoot) {
   uint16_t top = chromeTop(isRoot);
   uint16_t bottom = THEME_SPACE_MD;
-  int avail = (int)TFT_HEIGHT - (int)top - (int)bottom;
+  int avail = (int)THEME_SCREEN_H - (int)top - (int)bottom;
   int n = (avail + THEME_SPACE_SM) / (THEME_CARD_MIN_H + THEME_SPACE_SM);
   return n < 1 ? 1 : n;
 }
@@ -275,7 +275,7 @@ static int adaptedMaxVisible(bool isRoot) {
 static UiRect adaptedRowRect(int visualRow, bool isRoot) {
   uint16_t top = chromeTop(isRoot);
   uint16_t x = THEME_SPACE_MD;
-  uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
+  uint16_t w = THEME_SCREEN_W - THEME_SPACE_MD * 2;
   uint16_t y = top + visualRow * (THEME_CARD_MIN_H + THEME_SPACE_SM);
   return {(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)THEME_CARD_MIN_H};
 }
@@ -310,11 +310,11 @@ static void adaptedRender(Menu* menu, bool isRoot, int pressedRow, bool backPres
   }
 
   if (s_bodyCount == 0) {
-    cardkit_create_hint(s_lvContent, "Nothing here yet", TFT_WIDTH / 2, adaptedRowRect(0, isRoot).y + 10 - THEME_STATUSBAR_H);
+    cardkit_create_hint(s_lvContent, "Nothing here yet", THEME_SCREEN_W / 2, adaptedRowRect(0, isRoot).y + 10 - THEME_STATUSBAR_H);
   } else if (s_bodyCount > maxVisible) {
     char buf[20];
     snprintf(buf, sizeof(buf), "%d-%d of %d", s_pageStart + 1, s_pageStart + shown, s_bodyCount);
-    cardkit_create_hint(s_lvContent, buf, TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_MD - 8 - THEME_STATUSBAR_H);
+    cardkit_create_hint(s_lvContent, buf, THEME_SCREEN_W / 2, THEME_SCREEN_H - THEME_SPACE_MD - 8 - THEME_STATUSBAR_H);
   }
 
   lvRepaintEnd();
@@ -488,7 +488,7 @@ static void drawBadgeSubmenu() {
     uint16_t y = chromeTop(false);
     uint16_t rowH = THEME_CARD_MIN_H;
     uint16_t x = THEME_SPACE_MD;
-    uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
+    uint16_t w = THEME_SCREEN_W - THEME_SPACE_MD * 2;
 
     CardButton led{{x, y, w, rowH}, "LED Brightness", "Tap to adjust", false, true};
     drawCard(led, pressedZone == Z_LED);
@@ -522,7 +522,7 @@ static void drawBadgeSubmenu() {
     uint16_t y = chromeTop(false);
     uint16_t rowH = THEME_CARD_MIN_H;
     uint16_t x = THEME_SPACE_MD;
-    uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
+    uint16_t w = THEME_SCREEN_W - THEME_SPACE_MD * 2;
 
     TouchZone zones[6];
     int n = 0;
@@ -577,7 +577,7 @@ static void ledBrightnessOptionsScreen() {
   const uint16_t gridX = THEME_SPACE_MD;
   const uint16_t gridY = THEME_STATUSBAR_H + THEME_TITLE_H + THEME_SPACE_LG;
   const uint16_t cols = 4;
-  const uint16_t cellW = (TFT_WIDTH - THEME_SPACE_MD * 2 - THEME_SPACE_SM * (cols - 1)) / cols;
+  const uint16_t cellW = (THEME_SCREEN_W - THEME_SPACE_MD * 2 - THEME_SPACE_SM * (cols - 1)) / cols;
   const uint16_t cellH = THEME_CARD_MIN_H;
 
   auto cellRect = [&](uint8_t i) -> UiRect {
@@ -605,7 +605,7 @@ static void ledBrightnessOptionsScreen() {
       lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
       lv_obj_center(lbl);
     }
-    cardkit_create_hint(s_lvContent, "Tap a level to apply", TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_LG - THEME_STATUSBAR_H);
+    cardkit_create_hint(s_lvContent, "Tap a level to apply", THEME_SCREEN_W / 2, THEME_SCREEN_H - THEME_SPACE_LG - THEME_STATUSBAR_H);
     lvRepaintEnd();
   };
 
@@ -700,7 +700,7 @@ static void showBatteryStatus() {
     lv_obj_align(pctLabel, LV_ALIGN_TOP_MID, 0, contentY + THEME_SPACE_LG);
 
     uint16_t barY = contentY + THEME_SPACE_LG + 40;
-    uint16_t barW = TFT_WIDTH - UI_BAR_MARGIN * 2;
+    uint16_t barW = THEME_SCREEN_W - UI_BAR_MARGIN * 2;
 
     lv_obj_t* barBg = lv_obj_create(s_lvContent);
     lv_obj_remove_flag(barBg, LV_OBJ_FLAG_SCROLLABLE);
@@ -724,7 +724,7 @@ static void showBatteryStatus() {
     }
 
     cardkit_create_hint(s_lvContent, pct < 0 ? "Battery sensor unavailable" : "Press Back or knob to return",
-                         TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_LG - THEME_STATUSBAR_H);
+                         THEME_SCREEN_W / 2, THEME_SCREEN_H - THEME_SPACE_LG - THEME_STATUSBAR_H);
     lvRepaintEnd();
   };
 
@@ -851,7 +851,7 @@ static void settingsScreen() {
     uint16_t y = chromeTop(false);
     uint16_t rowH = THEME_CARD_MIN_H;
     uint16_t x = THEME_SPACE_MD;
-    uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
+    uint16_t w = THEME_SCREEN_W - THEME_SPACE_MD * 2;
 
     CardButton badge{{(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)rowH}, "Badge", "LED, buzzer, battery, HW test", false, true};
     drawCard(badge, pressedZone == Z_BADGE);
@@ -874,7 +874,7 @@ static void settingsScreen() {
     uint16_t y = chromeTop(false);
     uint16_t rowH = THEME_CARD_MIN_H;
     uint16_t x = THEME_SPACE_MD;
-    uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
+    uint16_t w = THEME_SCREEN_W - THEME_SPACE_MD * 2;
 
     TouchZone zones[3];
     int n = 0;

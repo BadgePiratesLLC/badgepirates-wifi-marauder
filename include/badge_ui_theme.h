@@ -21,6 +21,33 @@
 #define TFT_HEIGHT 320
 #endif
 
+// Effective on-screen resolution AFTER rotation. Both CC13 and CC14 run
+// this panel rotated into landscape (TFT_eSPI rotation 3 / 1 - see
+// marauder_config.h's SCREEN_ORIENTATION) - the real addressable/touchable
+// space is TFT_HEIGHT px wide x TFT_WIDTH px tall, the reverse of the
+// native pre-rotation TFT_WIDTH/TFT_HEIGHT constants above (upstream's own
+// landscape board configs make this same swap for SCREEN_WIDTH/HEIGHT,
+// e.g. configs.h's MARAUDER_CYD_MICRO - ours never did).
+//
+// Nexus 78e62be0 round 2 (Kevin, hardware): the touch-first UI layer used
+// TFT_WIDTH/TFT_HEIGHT directly for the LVGL canvas size, card layout, and
+// touch-zone rects - silently laying everything out against a portrait
+// 240x320 frame on a physical 320x240 landscape panel. Render (flush_cb)
+// pushes canvas coordinates straight into real rows/cols, unscaled, so a
+// control drawn at canvas-y 0-43 lands on real rows 0-43. But CC13's touch
+// mapping (XPT2046_Touchscreen.h -> Display.cpp's rotation-3 branch)
+// scales a real tap linearly across a 0-320 range regardless of the real
+// 240-row panel height, so a tap on real row 43 (the bottom of a 44px
+// button) gets reported at canvas-y ~57 - just outside the hit zone. Back
+// (44px, corner-anchored) loses more of its target to this than a
+// full-width row card does, which is why it looked like "back doesn't
+// work" specifically. touch_input.cpp's CC13 path now maps directly into
+// this same space instead of trusting that branch. Use these, not
+// TFT_WIDTH/TFT_HEIGHT, for anything screen-size-shaped (canvas size,
+// layout widths/heights, touch-zone rects).
+#define THEME_SCREEN_W       TFT_HEIGHT
+#define THEME_SCREEN_H       TFT_WIDTH
+
 // ---- Palette (dark, high-contrast, single accent) ----
 #define THEME_BG            0x0000  // near-black background
 #define THEME_SURFACE       0x2104  // card / row surface (dark slate)

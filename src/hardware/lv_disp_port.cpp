@@ -55,7 +55,7 @@ void lvDispInit() {
     lv_init();
     lv_tick_set_cb(lv_tick_cb);
 
-    lv_display_t* disp = lv_display_create(TFT_WIDTH, TFT_HEIGHT);
+    lv_display_t* disp = lv_display_create(THEME_SCREEN_W, THEME_SCREEN_H);
     lv_display_set_buffers(disp, s_draw_buf, nullptr, sizeof(s_draw_buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(disp, flush_cb);
 }

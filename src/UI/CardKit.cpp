@@ -119,7 +119,7 @@ lv_obj_t* cardkit_create_title(lv_obj_t* parent, const char* title, bool isRoot)
     lv_obj_set_style_text_color(label, cardkit_color(THEME_TEXT), 0);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
     lv_obj_update_layout(label);
-    lv_obj_set_pos(label, (TFT_WIDTH - lv_obj_get_width(label)) / 2, 4);
+    lv_obj_set_pos(label, (THEME_SCREEN_W - lv_obj_get_width(label)) / 2, 4);
 
     if (isRoot) {
         lv_obj_t* sub = lv_label_create(parent);
@@ -127,7 +127,7 @@ lv_obj_t* cardkit_create_title(lv_obj_t* parent, const char* title, bool isRoot)
         lv_obj_set_style_text_color(sub, cardkit_color(THEME_TEXT_MUTED), 0);
         lv_obj_set_style_text_font(sub, &lv_font_montserrat_12, 0);
         lv_obj_update_layout(sub);
-        lv_obj_set_pos(sub, (TFT_WIDTH - lv_obj_get_width(sub)) / 2, THEME_TITLE_H);
+        lv_obj_set_pos(sub, (THEME_SCREEN_W - lv_obj_get_width(sub)) / 2, THEME_TITLE_H);
     }
 
     return label;

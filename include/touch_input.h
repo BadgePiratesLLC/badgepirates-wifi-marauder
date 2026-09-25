@@ -1,10 +1,12 @@
 #pragma once
 // BSidesKC Badge - Touch input abstraction (Nexus 78e62be0)
 //
-// Wraps upstream Display::updateTouch() (already pixel-accurate for this
-// panel, see XPT2046_Touchscreen.h shim) with named on-screen rects and a
-// touch-down/touch-up debounce rule: a control only "fires" if the
-// touch-up lands inside the SAME rect that received the touch-down. A
+// Wraps the platform's raw touch read (CC14: upstream Display::updateTouch(),
+// pixel-accurate via the XPT2046_Touchscreen.h shim; CC13: touch_input.cpp's
+// own direct read - see the comment on that function for why CC13 can't use
+// Display::updateTouch() as-is, Nexus 78e62be0 round 2) with named on-screen
+// rects and a touch-down/touch-up debounce rule: a control only "fires" if
+// the touch-up lands inside the SAME rect that received the touch-down. A
 // drag off the button cancels instead of firing. This is the one true
 // input primitive new touch screens should poll instead of hand-rolling
 // their own updateTouch() loop.

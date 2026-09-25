@@ -25,6 +25,7 @@
 #include "sim_counters.h"
 #include "Framebuffer.h"
 #include "png_writer.h"
+#include "badge_ui_theme.h"
 
 // ---- globals the fakes declare extern ----
 Framebuffer gFb;
@@ -104,7 +105,7 @@ int main(int argc, char** argv) {
   std::string mode = argc > 1 ? argv[1] : "root";
   std::string outdir = argc > 2 ? argv[2] : "sim/out";
 
-  gFb.init(TFT_WIDTH, TFT_HEIGHT);
+  gFb.init(THEME_SCREEN_W, THEME_SCREEN_H);
 
   menu_function_obj.RunSetup();
   badgeMenuSetup();  // real production code, unmodified

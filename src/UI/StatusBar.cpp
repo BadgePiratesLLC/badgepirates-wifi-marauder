@@ -49,7 +49,7 @@ void statusbar_create(lv_obj_t* parent) {
   s_bar = lv_obj_create(parent);
   lv_obj_remove_flag(s_bar, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_pos(s_bar, 0, 0);
-  lv_obj_set_size(s_bar, TFT_WIDTH, THEME_STATUSBAR_H);
+  lv_obj_set_size(s_bar, THEME_SCREEN_W, THEME_STATUSBAR_H);
   lv_obj_set_style_radius(s_bar, 0, 0);
   lv_obj_set_style_bg_opa(s_bar, LV_OPA_COVER, 0);
   lv_obj_set_style_bg_color(s_bar, cardkit_color(THEME_BG), 0);
@@ -76,7 +76,7 @@ void statusbar_create(lv_obj_t* parent) {
   // Back - "tapping the battery or WiFi glyph must do nothing."
   s_gearBtn = lv_obj_create(s_bar);
   lv_obj_remove_flag(s_gearBtn, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_pos(s_gearBtn, TFT_WIDTH - THEME_GEAR_W, 0);
+  lv_obj_set_pos(s_gearBtn, THEME_SCREEN_W - THEME_GEAR_W, 0);
   lv_obj_set_size(s_gearBtn, THEME_GEAR_W, THEME_STATUSBAR_H);
   style_navbtn(s_gearBtn, false);
   lv_obj_t* gearLabel = lv_label_create(s_gearBtn);
@@ -93,7 +93,7 @@ void statusbar_create(lv_obj_t* parent) {
   lv_obj_t* cluster = lv_obj_create(s_bar);
   lv_obj_remove_flag(cluster, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_pos(cluster, THEME_BACK_W, 0);
-  lv_obj_set_size(cluster, TFT_WIDTH - THEME_BACK_W - THEME_GEAR_W, THEME_STATUSBAR_H);
+  lv_obj_set_size(cluster, THEME_SCREEN_W - THEME_BACK_W - THEME_GEAR_W, THEME_STATUSBAR_H);
   lv_obj_set_style_bg_opa(cluster, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(cluster, 0, 0);
   lv_obj_set_style_pad_all(cluster, 0, 0);
