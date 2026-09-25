@@ -20,8 +20,12 @@
 // blocking-loop control flow and TapDetector-based touch hit-testing
 // completely unchanged; only HOW a screen's pixels get drawn changed, not
 // when/how touch is read or what fires on a tap. That adapter's
-// double-fire fix (Nexus 78e62be0) is hardware-validated and this port
-// must not risk it.
+// double-fire fix (Nexus 78e62be0) is simulator-proven (sim/'s repro/
+// doublefire/fixed modes) but NOT hardware-validated - Carla's 78e62be0 QA
+// pass at 07:39 UTC on 2026-09-25 recorded the flash attempt itself
+// failing ("Failed to connect to ESP32-S3: No serial data received"), so
+// it has never actually run on a physical CC13. This port must not risk
+// the fix regardless of which state that turns out to be in.
 #include <lvgl.h>
 #include "badge_ui_theme.h"
 
