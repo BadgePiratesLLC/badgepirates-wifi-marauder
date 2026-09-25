@@ -21,6 +21,7 @@
 #include "Display.h"
 #include "MenuFunctions.h"
 #include "hardware/badge_menu.h"
+#include "hardware/splash_screen.h"
 #include "sim_counters.h"
 #include "Framebuffer.h"
 #include "png_writer.h"
@@ -288,6 +289,16 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  std::fprintf(stderr, "usage: %s [root|repro|doublefire|fixed|options] [outdir]\n", argv[0]);
+  if (mode == "splash") {
+    // Nexus 176cc276: the splash is its own LVGL screen, built and pushed
+    // before badgeMenuSetup() ever runs on real hardware (main.cpp) - same
+    // here. No tap sequence to script; splashShow() paints one complete
+    // frame and returns.
+    splashShow();
+    shot(outdir + "/00_splash.png");
+    return 0;
+  }
+
+  std::fprintf(stderr, "usage: %s [root|repro|doublefire|fixed|options|splash] [outdir]\n", argv[0]);
   return 1;
 }

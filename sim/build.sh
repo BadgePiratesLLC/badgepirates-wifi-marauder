@@ -13,7 +13,15 @@ OBJDIR=sim/.objs/lvgl
 mkdir -p "$OUT" "$OBJDIR"
 
 LVGL_DIR=sim/vendor/lvgl
-COMMON_FLAGS=(-O1 -g -DSIM_BUILD -DLV_CONF_INCLUDE_SIMPLE -Wno-c++11-narrowing \
+
+# Same BP_GIT_SHA build-time injection as scripts/inject_build_info.py does
+# for the real firmware (Nexus 176cc276) - the sim's splash render has to
+# show a real SHA too, not a placeholder, or it's not proving what the
+# splash actually looks like.
+BP_GIT_SHA=$(git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then BP_GIT_SHA="${BP_GIT_SHA}-dirty"; fi
+
+COMMON_FLAGS=(-O1 -g -DSIM_BUILD -DLV_CONF_INCLUDE_SIMPLE -DBP_GIT_SHA="\"$BP_GIT_SHA\"" -Wno-c++11-narrowing \
   -Isim/fakes -Isim/fakes/hardware -Isrc -Iinclude -I"$LVGL_DIR")
 
 # LVGL's own .c sources, object-cached by content hash of the file list so
@@ -38,7 +46,9 @@ clang++ -std=c++17 "${COMMON_FLAGS[@]}" \
   src/hardware/badge_menu.cpp \
   src/hardware/touch_input.cpp \
   src/hardware/badge_nav.cpp \
+  src/hardware/splash_screen.cpp \
   src/UI/CardKit.cpp \
+  src/UI/img_bp_skull.c \
   "${LVGL_OBJS[@]}" \
   -lz \
   -o "$OUT/badge_sim"

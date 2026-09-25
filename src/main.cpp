@@ -18,6 +18,7 @@
   #include "Display.h"
   #include "MenuFunctions.h"
   #include "hardware/display_adapter.h"
+  #include "hardware/splash_screen.h"
 #endif
 
 #ifdef HAS_SD
@@ -227,10 +228,13 @@ void setup() {
   brightnessInit();
   backlightOff();
 
+  // Boot splash (Nexus 176cc276): paint the complete LVGL frame to the
+  // panel FIRST, then raise the backlight - display_adapter.cpp's begin()
+  // holds the backlight off for exactly this ("start dark, caller turns
+  // on after splash"). No partial/progressive draw is ever visible.
   #ifdef HAS_SCREEN
-    display_obj.tft.drawCentreString("BSidesKC Badge", TFT_WIDTH / 2, TFT_HEIGHT * 0.25, 1);
-    display_obj.tft.drawCentreString("ESP32 Marauder", TFT_WIDTH / 2, TFT_HEIGHT * 0.40, 1);
-    display_obj.tft.drawCentreString(display_obj.version_number, TFT_WIDTH / 2, TFT_HEIGHT * 0.55, 1);
+    lv_obj_t* splashScreen = splashShow();
+    uint32_t splashStartMs = millis();
   #endif
 
   backlightOn();
@@ -337,6 +341,13 @@ void setup() {
   #ifdef HAS_SCREEN
     display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
     menu_function_obj.RunSetup();
+
+    // Dismiss the splash now: setup()'s real init work (SD, WiFi, battery,
+    // GPS, LED) already ran above, consuming most/all of the 1.2-1.8s hold
+    // budget - this only waits out whatever's left, or skips it instantly
+    // on a touch. Never a delay() stacked on top of boot work.
+    splashDismissWait(splashStartMs, splashScreen);
+
     badgeMenuSetup();
   #endif
 
