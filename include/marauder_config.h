@@ -14,7 +14,16 @@
 #define BSIDESKC_BADGE
 #define MARAUDER_V8  // upstream .cpp files check this for V8-specific code paths
 #define HARDWARE_NAME "BSidesKC Badge"
-#define MARAUDER_VERSION "v1.11.0"
+
+// MARAUDER_VERSION used to be hand-copied here ("v1.11.0") and could silently
+// drift from upstream (Nexus 176cc276 QA fail #4). scripts/inject_build_info.py
+// (mirrored in sim/build.sh) now greps the real value out of
+// esp32marauder-upstream/esp32_marauder/configs.h at build time and injects
+// it as BP_MARAUDER_VERSION_UPSTREAM - that's the only place the string lives.
+#ifndef BP_MARAUDER_VERSION_UPSTREAM
+#error "BP_MARAUDER_VERSION_UPSTREAM not defined - build without the pre-build script (scripts/inject_build_info.py / sim/build.sh) that derives it from upstream configs.h"
+#endif
+#define MARAUDER_VERSION BP_MARAUDER_VERSION_UPSTREAM
 
 // ---- Upstream Compat Constants ----
 #define POLISH_POTATO

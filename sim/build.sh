@@ -21,7 +21,19 @@ LVGL_DIR=sim/vendor/lvgl
 BP_GIT_SHA=$(git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
 if [ -n "$(git status --porcelain 2>/dev/null)" ]; then BP_GIT_SHA="${BP_GIT_SHA}-dirty"; fi
 
-COMMON_FLAGS=(-O1 -g -DSIM_BUILD -DLV_CONF_INCLUDE_SIMPLE -DBP_GIT_SHA="\"$BP_GIT_SHA\"" -Wno-c++11-narrowing \
+# Same upstream-configs.h extraction as scripts/inject_build_info.py does for
+# the real firmware (Nexus 176cc276 QA fail #4) - the sim must read the
+# actual upstream MARAUDER_VERSION, not a hand-copied literal, or the sim
+# render stops proving what it claims to prove.
+UPSTREAM_CONFIGS_H=esp32marauder-upstream/esp32_marauder/configs.h
+BP_MARAUDER_VERSION_UPSTREAM=$(grep -oE '#define[[:space:]]+MARAUDER_VERSION[[:space:]]+"[^"]+"' "$UPSTREAM_CONFIGS_H" | grep -oE '"[^"]+"' | tr -d '"')
+if [ -z "$BP_MARAUDER_VERSION_UPSTREAM" ]; then
+  echo "sim/build.sh: could not find MARAUDER_VERSION in $UPSTREAM_CONFIGS_H" >&2
+  exit 1
+fi
+
+COMMON_FLAGS=(-O1 -g -DSIM_BUILD -DLV_CONF_INCLUDE_SIMPLE -DBP_GIT_SHA="\"$BP_GIT_SHA\"" \
+  -DBP_MARAUDER_VERSION_UPSTREAM="\"$BP_MARAUDER_VERSION_UPSTREAM\"" -Wno-c++11-narrowing \
   -Isim/fakes -Isim/fakes/hardware -Isrc -Iinclude -I"$LVGL_DIR")
 
 # LVGL's own .c sources, object-cached by content hash of the file list so

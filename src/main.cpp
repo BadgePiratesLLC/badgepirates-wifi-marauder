@@ -313,10 +313,12 @@ void setup() {
   patch_wifi_config_no_psram(&wifi_scan_obj.cfg);
   wifi_scan_obj.RunSetup();
 
-  #ifdef HAS_SCREEN
-    display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
-    display_obj.tft.drawCentreString("Initializing...", TFT_WIDTH / 2, TFT_HEIGHT * 0.70, 1);
-  #endif
+  // No raw TFT_eSPI draw here (Nexus 176cc276 QA fail #5): the LVGL splash
+  // screen painted above is still the logically "active" screen until
+  // splashDismissWait() runs below, and display_obj.tft writes straight to
+  // the panel's GRAM without LVGL's knowledge - two renderers touching the
+  // same panel in the same window is the exact failure mode "LVGL owns the
+  // panel" (Nexus 84f4e52c) exists to prevent.
 
   evil_portal_obj.setup();
 

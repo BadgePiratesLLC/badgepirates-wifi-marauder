@@ -91,8 +91,11 @@ lv_obj_t* splashShow() {
   // Version block. Every value here is READ, never retyped:
   //  - BP_BUILD_VERSION: our own #define (bsideskc_config.h) - the one
   //    literal in this whole block, bumped by hand when we cut a build.
-  //  - MARAUDER_VERSION: upstream's own #define (configs.h chain) - same
-  //    define main.cpp's version_number already uses.
+  //  - MARAUDER_VERSION: extracted from upstream's real configs.h at build
+  //    time by scripts/inject_build_info.py (mirrored in sim/build.sh) into
+  //    BP_MARAUDER_VERSION_UPSTREAM - not the hand-copied literal this used
+  //    to be (Nexus 176cc276 QA fail #4). Same define main.cpp's
+  //    version_number already uses.
   //  - BP_GIT_SHA: injected at build time (see the #ifndef above) - never
   //    a literal anywhere in source.
   // "A boot screen that reports a version the badge is not running is
