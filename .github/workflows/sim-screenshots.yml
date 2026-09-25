@@ -36,14 +36,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # esp32marauder-upstream is ALSO a direct submodule of this repo
-          # and the sim build never touches it (see sim/README.md) - so
-          # this stays false (not recursive/true, which would fetch both)
-          # and sim/vendor/lvgl gets its own targeted init below instead.
+          # esp32marauder-upstream is ALSO a direct submodule of this repo.
+          # This stays false (not recursive/true, which would eagerly fetch
+          # both on every checkout) - sim/vendor/lvgl and esp32marauder-upstream
+          # each get their own targeted init below instead.
           submodules: false
 
       - name: Init LVGL submodule (Nexus 84f4e52c)
         run: git submodule update --init sim/vendor/lvgl
+
+      - name: Init upstream submodule (Nexus 176cc276 - build.sh reads its configs.h for MARAUDER_VERSION)
+        run: git submodule update --init esp32marauder-upstream
 
       - name: Install build deps
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
