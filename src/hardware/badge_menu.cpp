@@ -132,16 +132,15 @@ static void lvRepaintBegin(const char* title, bool isRoot, bool backPressed, boo
   cardkit_create_title(s_lvContent, title, isRoot);
 
   // Force the WHOLE screen (bar included) to actually be re-flushed, not
-  // just whatever LVGL's own dirty tracking thinks changed. showBatteryStatus()/
-  // toggleBuzzerMute()/runHwTest() below still draw straight to
-  // display_obj.tft (raw TFT_eSPI, pre-dating this port - "not full-restyle
-  // targets this half," see their own comment) and can physically clobber
-  // the bar's pixels with zero visibility into LVGL's invalidation state.
-  // Before Nexus c39cd3b3, every repaint rebuilt the header from scratch,
-  // which self-healed this for free; the bar not being rebuilt per screen
-  // is the entire point now, so this one-line invalidate replaces that
-  // free side effect on purpose - "must survive... or it is not a status
-  // bar" applies here too.
+  // just whatever LVGL's own dirty tracking thinks changed. runHwTest()
+  // below hands off to a raw-TFT diagnostic (input_test.cpp - has to stay
+  // independent of LVGL, see its own comment) that draws for as long as a
+  // user leaves it running, with zero visibility into LVGL's invalidation
+  // state in the meantime. Before Nexus c39cd3b3, every repaint rebuilt
+  // the header from scratch, which self-healed this for free; the bar not
+  // being rebuilt per screen is the entire point now, so this one-line
+  // invalidate replaces that free side effect on purpose - "must
+  // survive... or it is not a status bar" applies here too.
   lv_obj_invalidate(screen);
 }
 
@@ -198,7 +197,13 @@ void showBatteryStatus();
 #else
 static void showBatteryStatus();
 #endif
+#ifdef SIM_BUILD
+// Same reasoning - sim_main.cpp calls this directly to prove the status
+// bar survives it too (Carla's c39cd3b3 QA FAIL round 2).
+void toggleBuzzerMute();
+#else
 static void toggleBuzzerMute();
+#endif
 static void runHwTest();
 static void settingsScreen();
 
@@ -657,12 +662,16 @@ static void ledBrightnessOptionsScreen() {
 // this half, but they're reachable from the touch-first Badge submenu
 // now, so they must not be touch dead-ends (req #4).
 //
-// showBatteryStatus() used to be a raw TFT_eSPI screen that called
-// display_obj.clearScreen() and drew straight to the panel - which wiped
-// the persistent status bar entirely (Carla's c39cd3b3 QA FAIL: "not
-// actually persistent on every screen"). Rebuilt on the same
-// lvRepaintBegin/lvRepaintEnd + s_lvContent pattern every other screen in
-// this file uses, so the bar (and Back control) survive here too.
+// All three used to draw raw TFT_eSPI straight to the panel (via
+// display_obj.clearScreen() or equivalent), which wiped the persistent
+// status bar entirely - Carla's c39cd3b3 QA FAIL, caught twice: first on
+// showBatteryStatus() ("not actually persistent on every screen"), then
+// again on toggleBuzzerMute()/runHwTest() ("identical bug class"). The
+// first two are now rebuilt on the same lvRepaintBegin/lvRepaintEnd +
+// s_lvContent pattern every other screen in this file uses, so the bar
+// (and Back control) survive there too. runHwTest() hands off to a raw
+// hardware diagnostic that has to stay independent of LVGL - see its own
+// comment for how it keeps the bar's pixels untouched instead.
 // ---------------------------------------------------------------------
 
 #ifdef SIM_BUILD
@@ -743,16 +752,41 @@ static void showBatteryStatus() {
   badgeNavPop();
 }
 
+// Carla's second c39cd3b3 QA FAIL: both of these still called the raw
+// display_obj.clearScreen() (TFT_eSPI fillScreen) that showBatteryStatus()
+// itself used to call before its own fix - same bug, two sibling screens
+// in the same submenu.
+#ifdef SIM_BUILD
+void toggleBuzzerMute() {
+#else
 static void toggleBuzzerMute() {
+#endif
   buzzerMute(!buzzerIsMuted());
-  display_obj.clearScreen();
-  badge_display.drawCenteredTitle(buzzerIsMuted() ? "Buzzer: MUTED" : "Buzzer: ON");
+  // Reuses the normal title slot (same one "Badge"/"Battery Status"/
+  // "Settings" render into) for the confirmation text instead of a raw
+  // drawCenteredTitle() - same lvRepaintBegin/lvRepaintEnd every other
+  // screen here uses, so the bar survives this one too.
+  lvRepaintBegin(buzzerIsMuted() ? "Buzzer: MUTED" : "Buzzer: ON", /*isRoot=*/false, false);
+  lvRepaintEnd();
   delay(500);  // brief confirmation flash only, not a wait-for-input screen
 }
 
 static void runHwTest() {
+  // runInputValidationTest() (input_test.cpp) is a raw hardware bring-up
+  // diagnostic that reads touch/buttons/encoder directly - it has to stay
+  // independent of LVGL and touch_input.cpp, since its entire job is
+  // validating whether those layers' inputs even work, not routing
+  // through them. It can't be wrapped in lvRepaintBegin/s_lvContent like
+  // the other screens here without defeating that.
+  //
+  // Instead: paint the chrome (status bar + Back/gear + title) via the
+  // normal LVGL path once, right before handing off - input_test.cpp
+  // confines all of its raw drawing to rows below THEME_STATUSBAR_H
+  // (see its own comment), so those pixels are never touched again for
+  // the whole diagnostic, however long a user leaves it running.
+  lvRepaintBegin("Hardware Test", /*isRoot=*/false, false);
+  lvRepaintEnd();
   runInputValidationTest();
-  display_obj.clearScreen();
 }
 
 // ---------------------------------------------------------------------

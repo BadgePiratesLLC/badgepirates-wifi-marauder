@@ -60,6 +60,7 @@ void sim_capture_frame(const char* label) {
 }
 extern void ledBrightnessOptionsScreen();  // SIM_BUILD gives this external linkage
 extern void showBatteryStatus();  // same seam, same reason (Nexus c39cd3b3 QA fix)
+extern void toggleBuzzerMute();  // same seam, round 2 of the same QA fix
 
 // One real loop() tick, split so the harness can screenshot in between the
 // two draw owners — main.cpp itself calls these back-to-back every
@@ -344,6 +345,14 @@ int main(int argc, char** argv) {
     s_captureLabel = "battery_status";
     s_capturePath = outdir + "/15_statusbar_battery_screen.png";
     showBatteryStatus();
+
+    // Round 2 of the same Carla QA FAIL: toggleBuzzerMute() also used to
+    // wipe the whole panel. It has no blocking input loop of its own (just
+    // a 500ms confirmation flash - a no-op delay() in the sim, see
+    // sim/fakes/Arduino.h), so no SIM_FRAME seam is needed - call it
+    // directly and shoot right after it returns.
+    toggleBuzzerMute();
+    shot(outdir + "/16_statusbar_buzzer_toggle.png");
 
     return 0;
   }

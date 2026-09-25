@@ -6,8 +6,17 @@
 #include "hardware/display_adapter.h"
 #include "hardware/button_handler.h"
 #include "hardware/encoder_handler.h"
+#include "badge_ui_theme.h"
 
 extern Display display_obj;
+
+// Nexus c39cd3b3: this diagnostic draws raw TFT (see runInputValidationTest()
+// below for why it can't route through LVGL) but must not clobber the
+// persistent status bar badge_menu.cpp's runHwTest() paints just before
+// calling in here. Every raw draw below is confined to rows >=
+// CONTENT_TOP so those bar pixels are never touched, however long the
+// test runs.
+static const int16_t CONTENT_TOP = THEME_STATUSBAR_H;
 
 // Status tracking for each input component
 static struct {
@@ -24,15 +33,15 @@ static int _enc_pos = 0;
 static uint8_t _bl_level = 9;
 
 static void drawHeader() {
-  display_obj.tft.fillScreen(TFT_BLACK);
+  display_obj.tft.fillRect(0, CONTENT_TOP, TFT_WIDTH, TFT_HEIGHT - CONTENT_TOP, TFT_BLACK);
   display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
-  display_obj.tft.drawCentreString("INPUT VALIDATION", TFT_WIDTH / 2, 2, 2);
+  display_obj.tft.drawCentreString("INPUT VALIDATION", TFT_WIDTH / 2, CONTENT_TOP + 2, 2);
   display_obj.tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
   display_obj.tft.drawCentreString("Hold BOOT+BACK to exit", TFT_WIDTH / 2, TFT_HEIGHT - 14, 1);
 }
 
 static void drawChecklist() {
-  int y = 24;
+  int y = CONTENT_TOP + 24;
   const int x = 4;
   auto row = [&](const char* label, bool ok) {
     display_obj.tft.fillRect(x, y, TFT_WIDTH / 2 - 4, 14, TFT_BLACK);
@@ -52,7 +61,7 @@ static void drawChecklist() {
 
 static void drawStatus() {
   int rx = TFT_WIDTH / 2 + 4;
-  int y = 24;
+  int y = CONTENT_TOP + 24;
   display_obj.tft.fillRect(rx, y, TFT_WIDTH / 2 - 4, 100, TFT_BLACK);
   display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
   display_obj.tft.setCursor(rx, y);
@@ -67,7 +76,7 @@ static void drawStatus() {
 
 static void updateTouchCoord(uint16_t tx, uint16_t ty) {
   int rx = TFT_WIDTH / 2 + 4;
-  int y = 24 + 32;
+  int y = CONTENT_TOP + 24 + 32;
   display_obj.tft.fillRect(rx, y, TFT_WIDTH / 2 - 4, 14, TFT_BLACK);
   display_obj.tft.setTextColor(TFT_YELLOW, TFT_BLACK);
   display_obj.tft.setCursor(rx, y);
@@ -133,9 +142,9 @@ void runInputValidationTest() {
       _enc_pos--;
       if (!_validated.enc_ccw) { _validated.enc_ccw = true; drawChecklist(); }
       int rx = TFT_WIDTH / 2 + 4;
-      display_obj.tft.fillRect(rx, 24, TFT_WIDTH / 2 - 4, 14, TFT_BLACK);
+      display_obj.tft.fillRect(rx, CONTENT_TOP + 24, TFT_WIDTH / 2 - 4, 14, TFT_BLACK);
       display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
-      display_obj.tft.setCursor(rx, 24);
+      display_obj.tft.setCursor(rx, CONTENT_TOP + 24);
       display_obj.tft.printf("Enc pos: %d", _enc_pos);
       Serial.printf("[InputTest] Enc CCW pos=%d\n", _enc_pos);
     }
@@ -143,9 +152,9 @@ void runInputValidationTest() {
       _enc_pos++;
       if (!_validated.enc_cw) { _validated.enc_cw = true; drawChecklist(); }
       int rx = TFT_WIDTH / 2 + 4;
-      display_obj.tft.fillRect(rx, 24, TFT_WIDTH / 2 - 4, 14, TFT_BLACK);
+      display_obj.tft.fillRect(rx, CONTENT_TOP + 24, TFT_WIDTH / 2 - 4, 14, TFT_BLACK);
       display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
-      display_obj.tft.setCursor(rx, 24);
+      display_obj.tft.setCursor(rx, CONTENT_TOP + 24);
       display_obj.tft.printf("Enc pos: %d", _enc_pos);
       Serial.printf("[InputTest] Enc CW pos=%d\n", _enc_pos);
     }
@@ -164,7 +173,7 @@ void runInputValidationTest() {
                _validated.boot + _validated.enc_cw + _validated.enc_ccw +
                _validated.enc_btn;
   Serial.printf("[InputTest] Result: %d/7 inputs validated\n", passed);
-  display_obj.tft.fillScreen(TFT_BLACK);
+  display_obj.tft.fillRect(0, CONTENT_TOP, TFT_WIDTH, TFT_HEIGHT - CONTENT_TOP, TFT_BLACK);
   display_obj.tft.setTextColor(passed == 7 ? TFT_GREEN : TFT_YELLOW, TFT_BLACK);
   display_obj.tft.drawCentreString(
     passed == 7 ? "ALL PASS" : "INCOMPLETE",

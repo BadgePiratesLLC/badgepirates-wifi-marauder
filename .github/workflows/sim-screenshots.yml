@@ -60,6 +60,9 @@ jobs:
           ./sim/out/badge_sim options sim/out    # 03_options.png
           ./sim/out/badge_sim pressed sim/out    # 04_pressed.png
 
+      - name: Render the status bar scenarios (Nexus c39cd3b3)
+        run: ./sim/out/badge_sim statusbar sim/out   # 10-16_statusbar_*.png
+
       - uses: actions/upload-artifact@v4
         with:
           name: badge-ui-screenshots
@@ -68,4 +71,11 @@ jobs:
             sim/out/02_submenu.png
             sim/out/03_options.png
             sim/out/04_pressed.png
+            sim/out/10_statusbar_off.png
+            sim/out/11_statusbar_on_synced.png
+            sim/out/12_statusbar_low_battery.png
+            sim/out/13_statusbar_battery_unknown.png
+            sim/out/14_statusbar_submenu.png
+            sim/out/15_statusbar_battery_screen.png
+            sim/out/16_statusbar_buzzer_toggle.png
           retention-days: 90
