@@ -370,45 +370,13 @@ void loop() {
     menu_function_obj.main(currentTime);
   #endif
 
-  // ---- Rotary encoder → menu navigation ----
+  // ---- Touch-first menu navigation (Nexus 78e62be0 half 2) ----
+  // badgeMenuLoop() renders whatever Menu upstream's MenuFunctions tree
+  // currently holds as cards and drives it from touch + encoder alike;
+  // it no-ops itself whenever a scan/attack screen owns the display
+  // instead of a menu. See src/hardware/badge_menu.cpp for the adapter.
   #ifdef HAS_SCREEN
-  {
-    bool inMenu = (wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
-                  (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
-                  (wifi_scan_obj.currentScanMode == OTA_UPDATE);
-
-    bool enc_up = encoder_turned_up();
-    bool enc_down = encoder_turned_down();
-
-    if ((enc_up || enc_down) && inMenu) {
-      powerManagerResetActivity();
-      Menu* m = menu_function_obj.current_menu;
-      int count = m->list->size();
-      if (count > 0) {
-        if (enc_up)
-          m->selected = (m->selected == 0) ? count - 1 : m->selected - 1;
-        else
-          m->selected = (m->selected >= count - 1) ? 0 : m->selected + 1;
-
-        // Compute page start for the new selection
-        int page = 0;
-        if (m->selected >= BUTTON_SCREEN_LIMIT)
-          page = m->selected + 1 - BUTTON_SCREEN_LIMIT;
-        menu_function_obj.buildButtons(m, page);
-        menu_function_obj.displayCurrentMenu(page);
-      }
-    }
-
-    if (encoder_button_pressed() && inMenu) {
-      powerManagerResetActivity();
-      buzzerPlay(TONE_BUTTON_PRESS);
-      Menu* m = menu_function_obj.current_menu;
-      if (m->list->size() > 0) {
-        MenuNode node = m->list->get(m->selected);
-        if (node.callable) node.callable();
-      }
-    }
-  }
+    badgeMenuLoop();
   #endif
 
   // BOOT button: short press cycles backlight

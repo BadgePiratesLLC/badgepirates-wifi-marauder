@@ -1,12 +1,26 @@
 // BSidesKC Badge - Badge-specific menu integration
-// Nexus 78e62be0: touch-first UI overhaul (half 1 of 2).
+// Nexus 78e62be0: touch-first UI overhaul.
 //
-// Root/idle screen, the "Badge" submenu, and the LED Brightness options
-// screen are now fully custom-drawn on our side (theme + touch + a small
-// generic back-stack) instead of leaning on upstream's encoder-driven
-// Menu/MenuNode rendering. Everything else (the ~20 remaining upstream
-// screens, including Marauder's own main menu once you tap into it) is
-// untouched this half - see Nexus ticket for the scope boundary.
+// Half 1 built the touch primitives (theme, TapDetector, card buttons,
+// back-stack) and used them to hand-draw three screens: root/idle, the
+// "Badge" submenu, and the LED Brightness options screen. Everything
+// else - the ~20 remaining upstream Menu/MenuNode screens, reached the
+// moment you opened Marauder's own main menu - was still upstream's
+// encoder-only renderer, which is what Kevin hit ("goes back to the old
+// UI... does not let me select properly").
+//
+// Half 2 (this file, badgeMenuLoop() below) fixes that with ONE adapter
+// instead of rewriting 20 screens: it renders whatever Menu the upstream
+// MenuFunctions tree currently holds as our cards, and taps a card by
+// calling that MenuNode's own `callable` - exactly what pressing the
+// encoder button already did. Same trick covers every submenu at once,
+// including ones added later, with zero changes to MenuFunctions.cpp.
+//
+// The Badge/LED/Battery screens from half 1 stay as bespoke code (LED
+// brightness needs an options-grid, not a menu list) and keep using the
+// badgeNav back-stack. The generic adapter instead reuses upstream's own
+// Menu::parentMenu chain as its back-stack - that's the "back-stack" the
+// ticket says to keep, just applied to a tree that already has one.
 
 #include "configs.h"
 #ifdef HAS_SCREEN
@@ -20,6 +34,7 @@
 #include "hardware/display_adapter.h"
 #include "hardware/encoder_handler.h"
 #include "hardware/input_test.h"
+#include "hardware/power_manager.h"
 #include "badge_ui_theme.h"
 #include "touch_input.h"
 #include "badge_nav.h"
@@ -100,7 +115,6 @@ static void drawCard(const CardButton& c, bool pressed) {
 // Forward decls for the screens in this file.
 // ---------------------------------------------------------------------
 
-static void badgeIdleScreen();
 static void drawBadgeSubmenu();
 static void ledBrightnessOptionsScreen();
 static void showBatteryStatus();
@@ -108,42 +122,209 @@ static void toggleBuzzerMute();
 static void runHwTest();
 
 // ---------------------------------------------------------------------
-// Root / idle screen (Nexus req #12: identity lives here; no Back).
+// Generic adapter (half 2): renders ANY upstream Menu - mainMenu itself
+// (req #2: root shows top-level items directly, no "Menu" tap-through)
+// and every submenu under it - as our cards, and drives selection off
+// both touch and the encoder. See the file header for the design.
 // ---------------------------------------------------------------------
 
-static void badgeIdleScreen() {
-  badgeNavPush(badgeIdleScreen, "");  // root marker; badgeNavIsRoot() == true here
+#define MAX_ADAPTED_NODES 32  // headroom over the biggest upstream submenu (wifiSnifferMenu, ~22)
 
-  display_obj.tft.fillScreen(THEME_BG);
-  drawChrome("", /*isRoot=*/true);
+static Menu*   s_adaptedMenu = nullptr;               // Menu this adapter last drew
+static bool    s_needsRebuild = true;                 // force a fresh card render next frame
+static bool    s_wasInMenu = false;                   // detects returning from a scan/attack screen
+static uint8_t s_bodyRaw[MAX_ADAPTED_NODES];           // raw menu->list indices, "Back" node excluded
+static int     s_bodyCount = 0;
+static int     s_selRow = 0;                          // index into s_bodyRaw - shared by touch + encoder
+static int     s_pageStart = 0;
+static int     s_pressedRow = -1;                     // live touch-down visual, -1 = none
+static bool    s_backPressed = false;
+static TapDetector s_adaptedTap;
 
-  display_obj.tft.setTextColor(THEME_ACCENT, THEME_BG);
-  display_obj.tft.drawCentreString("BADGE PIRATES", TFT_WIDTH / 2, 60, THEME_FONT_LG);
-  display_obj.tft.setTextColor(THEME_TEXT_MUTED, THEME_BG);
-  display_obj.tft.drawCentreString("CC13", TFT_WIDTH / 2, 90, THEME_FONT_MD);
+// Upstream prepends a MenuNode named "Back" to every non-root submenu
+// (its callable does exactly `changeMenu(parentMenu, true)`). We give
+// every non-root screen our own persistent Back control in chrome
+// instead, so skip upstream's copy here rather than showing it twice.
+static bool isBackNode(const MenuNode& n) {
+  return n.name.equals("Back");
+}
 
-  const uint8_t ZONE_MENU = 1;
-  CardButton menuBtn{{THEME_SPACE_LG, 140, TFT_WIDTH - THEME_SPACE_LG * 2, THEME_CARD_MIN_H + 10}, "Menu", "Tap to open", false};
-  drawCard(menuBtn, false);
-  display_obj.tft.setTextColor(THEME_TEXT_MUTED, THEME_BG);
-  display_obj.tft.drawCentreString("Tap Menu to begin", TFT_WIDTH / 2, TFT_HEIGHT - 20, THEME_FONT_SM);
-
-  TapDetector tap;
-  bool lastPressed = false;
-  while (true) {
-    TouchZone zones[] = {{menuBtn.rect, ZONE_MENU}};
-    int fired = tap.poll(zones, 1);
-    bool pressedNow = tap.isPressed(ZONE_MENU);
-    if (pressedNow != lastPressed) {
-      drawCard(menuBtn, pressedNow);
-      lastPressed = pressedNow;
+static void adaptedRebuildBody(Menu* menu) {
+  s_bodyCount = 0;
+  if (menu->list != nullptr) {
+    int n = menu->list->size();
+    for (int i = 0; i < n && s_bodyCount < MAX_ADAPTED_NODES; i++) {
+      if (!isBackNode(menu->list->get(i))) s_bodyRaw[s_bodyCount++] = (uint8_t)i;
     }
-    if (fired == ZONE_MENU || encoder_button_pressed()) break;
-    delay(30);
+  }
+  s_selRow = 0;
+  s_pageStart = 0;
+  s_pressedRow = -1;
+  s_backPressed = false;
+}
+
+// How many card rows fit below the chrome. Derived from the theme, not
+// hand-picked per menu - a menu with more items than this just pages
+// (encoder scrolls it into view; see the "N-M of T" indicator below).
+static int adaptedMaxVisible(bool isRoot) {
+  uint16_t top = THEME_HEADER_H + (isRoot ? THEME_ROOT_BRAND_H : 0) + THEME_SPACE_MD;
+  uint16_t bottom = THEME_SPACE_MD;
+  int avail = (int)TFT_HEIGHT - (int)top - (int)bottom;
+  int n = (avail + THEME_SPACE_SM) / (THEME_CARD_MIN_H + THEME_SPACE_SM);
+  return n < 1 ? 1 : n;
+}
+
+static UiRect adaptedRowRect(int visualRow, bool isRoot) {
+  uint16_t top = THEME_HEADER_H + (isRoot ? THEME_ROOT_BRAND_H : 0) + THEME_SPACE_MD;
+  uint16_t x = THEME_SPACE_MD;
+  uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
+  uint16_t y = top + visualRow * (THEME_CARD_MIN_H + THEME_SPACE_SM);
+  return {(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)THEME_CARD_MIN_H};
+}
+
+static void adaptedEnsurePageVisible(int maxVisible) {
+  if (s_selRow < s_pageStart) s_pageStart = s_selRow;
+  if (s_selRow >= s_pageStart + maxVisible) s_pageStart = s_selRow - maxVisible + 1;
+  if (s_pageStart < 0) s_pageStart = 0;
+  int maxStart = s_bodyCount - maxVisible;
+  if (maxStart < 0) maxStart = 0;
+  if (s_pageStart > maxStart) s_pageStart = maxStart;
+}
+
+static void adaptedRender(Menu* menu, bool isRoot, int pressedRow, bool backPressed) {
+  display_obj.tft.fillScreen(THEME_BG);
+
+  const char* title = isRoot ? "BADGE PIRATES" : menu->name.c_str();
+  drawChrome(title, isRoot);
+  if (isRoot) {
+    display_obj.tft.setTextColor(THEME_TEXT_MUTED, THEME_BG);
+    display_obj.tft.drawCentreString("CC13", TFT_WIDTH / 2, THEME_HEADER_H + 2, THEME_FONT_SM);
+  } else {
+    drawBackButton(backPressed);
   }
 
-  menu_function_obj.changeMenu(s_mainMenu, true);
-  badgeNavPop();
+  int maxVisible = adaptedMaxVisible(isRoot);
+  adaptedEnsurePageVisible(maxVisible);
+
+  int shown = min(maxVisible, s_bodyCount - s_pageStart);
+  for (int row = 0; row < shown; row++) {
+    int bodyIdx = s_pageStart + row;
+    MenuNode node = menu->list->get(s_bodyRaw[bodyIdx]);
+    UiRect r = adaptedRowRect(row, isRoot);
+    CardButton c{r, node.name.c_str(), nullptr, bodyIdx == s_selRow};
+    drawCard(c, pressedRow == bodyIdx);
+  }
+
+  if (s_bodyCount == 0) {
+    display_obj.tft.setTextColor(THEME_TEXT_MUTED, THEME_BG);
+    display_obj.tft.drawCentreString("Nothing here yet", TFT_WIDTH / 2, adaptedRowRect(0, isRoot).y + 10, THEME_FONT_SM);
+  } else if (s_bodyCount > maxVisible) {
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%d-%d of %d", s_pageStart + 1, s_pageStart + shown, s_bodyCount);
+    display_obj.tft.setTextColor(THEME_TEXT_MUTED, THEME_BG);
+    display_obj.tft.drawCentreString(buf, TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_MD - 8, THEME_FONT_SM);
+  }
+}
+
+// Fires whenever the currently-selected node's action should run - tap
+// on its card, or encoder button press (req #4: both inputs, same
+// outcome). Whatever the callable does to current_menu (change it,
+// leave it, or take the display away entirely into a scan screen), our
+// cached state is now stale, so force a full resync next frame instead
+// of guessing what changed.
+static void adaptedActivate(Menu* menu, int bodyRow) {
+  if (bodyRow < 0 || bodyRow >= s_bodyCount) return;
+  powerManagerResetActivity();
+  buzzerPlay(TONE_BUTTON_PRESS);
+  MenuNode node = menu->list->get(s_bodyRaw[bodyRow]);
+  s_needsRebuild = true;
+  if (node.callable) node.callable();
+}
+
+static void adaptedGoBack(Menu* menu) {
+  if (menu->parentMenu == nullptr) return;  // root: chrome never draws a Back control here
+  powerManagerResetActivity();
+  buzzerPlay(TONE_BUTTON_PRESS);
+  s_needsRebuild = true;
+  menu_function_obj.changeMenu(menu->parentMenu, true);
+}
+
+void badgeMenuLoop() {
+  bool inMenu = (wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
+                (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
+                (wifi_scan_obj.currentScanMode == OTA_UPDATE);
+  if (!inMenu) {
+    s_wasInMenu = false;
+    return;  // a scan/attack screen owns the display; not our concern this half
+  }
+  // Coming back from a scan/attack screen leaves whatever that screen drew
+  // on the panel - force a redraw even though current_menu never changed.
+  if (!s_wasInMenu) s_needsRebuild = true;
+  s_wasInMenu = true;
+
+  Menu* menu = menu_function_obj.current_menu;
+  if (menu == nullptr) return;
+  bool isRoot = (menu->parentMenu == nullptr);
+
+  if (s_needsRebuild || menu != s_adaptedMenu) {
+    s_adaptedMenu = menu;
+    adaptedRebuildBody(menu);
+    adaptedRender(menu, isRoot, -1, false);
+    s_needsRebuild = false;
+    return;  // don't also read input the same frame we just (re)drew
+  }
+
+  int maxVisible = adaptedMaxVisible(isRoot);
+
+  // --- Encoder: secondary input, drives the same selection as touch ---
+  bool encMoved = false;
+  if (s_bodyCount > 0 && encoder_turned_up()) {
+    s_selRow = (s_selRow == 0) ? s_bodyCount - 1 : s_selRow - 1;
+    encMoved = true;
+  }
+  if (s_bodyCount > 0 && encoder_turned_down()) {
+    s_selRow = (s_selRow >= s_bodyCount - 1) ? 0 : s_selRow + 1;
+    encMoved = true;
+  }
+  if (encMoved) {
+    powerManagerResetActivity();
+    adaptedRender(menu, isRoot, -1, false);
+    return;
+  }
+  if (encoder_button_pressed()) {
+    adaptedActivate(menu, s_selRow);
+    return;
+  }
+
+  // --- Touch: primary input ---
+  TouchZone zones[MAX_ADAPTED_NODES + 1];
+  int n = 0;
+  if (!isRoot) zones[n++] = {kBackRect, ZONE_BACK};
+  int shown = min(maxVisible, s_bodyCount - s_pageStart);
+  for (int row = 0; row < shown; row++) {
+    zones[n++] = {adaptedRowRect(row, isRoot), (uint8_t)(s_pageStart + row)};
+  }
+
+  int fired = s_adaptedTap.poll(zones, n);
+
+  int pressedRow = -1;
+  for (int row = 0; row < shown; row++) {
+    int bodyIdx = s_pageStart + row;
+    if (s_adaptedTap.isPressed((uint8_t)bodyIdx)) pressedRow = bodyIdx;
+  }
+  bool backPressed = !isRoot && s_adaptedTap.isPressed(ZONE_BACK);
+  if (pressedRow != s_pressedRow || backPressed != s_backPressed) {
+    s_pressedRow = pressedRow;
+    s_backPressed = backPressed;
+    adaptedRender(menu, isRoot, pressedRow, backPressed);
+  }
+
+  if (fired == ZONE_BACK) {
+    adaptedGoBack(menu);
+  } else if (fired >= 0 && fired < s_bodyCount) {
+    s_selRow = fired;
+    adaptedActivate(menu, fired);
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -355,8 +536,11 @@ static void runHwTest() {
 // ---------------------------------------------------------------------
 // Setup: register "Badge" in upstream's main menu (one MenuNode, same as
 // before) but point it at our own drawBadgeSubmenu() instead of handing
-// off to upstream's Menu/MenuNode renderer. Finish by showing our new
-// root/idle screen instead of dropping straight into upstream's main menu.
+// off to upstream's Menu/MenuNode renderer. Finish by pointing
+// current_menu at mainMenu - badgeMenuLoop() (called every loop()
+// iteration from main.cpp) takes it from there and draws it as cards
+// from the very first frame, so root IS the top-level menu (req #2),
+// not a screen that hands off to one.
 // ---------------------------------------------------------------------
 
 void badgeMenuSetup() {
@@ -376,7 +560,7 @@ void badgeMenuSetup() {
 
   Serial.println(F("[Badge] Menu items added"));
 
-  badgeIdleScreen();
+  menu_function_obj.changeMenu(s_mainMenu, true);
 }
 
 #endif

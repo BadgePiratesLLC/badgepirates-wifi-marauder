@@ -1,0 +1,26 @@
+diff --git a/esp32_marauder/MenuFunctions.cpp b/esp32_marauder/MenuFunctions.cpp
+index 3ef40ec..fa80f71 100644
+--- a/esp32_marauder/MenuFunctions.cpp
++++ b/esp32_marauder/MenuFunctions.cpp
+@@ -1508,7 +1508,9 @@ void MenuFunctions::RunSetup()
+   evilPortalMenu.list = new LinkedList<MenuNode>();
+   ssidsMenu.list = new LinkedList<MenuNode>();
+ 
+-  gpsPOIMenu.list = new LinkedList<MenuNode>();
++  #ifdef HAS_GPS
++    gpsPOIMenu.list = new LinkedList<MenuNode>();
++  #endif
+ 
+   // Work menu names
+   mainMenu.name = text_table1[6];
+@@ -1557,7 +1559,9 @@ void MenuFunctions::RunSetup()
+   evilPortalMenu.name = "Evil Portal";
+   ssidsMenu.name = "SSIDs";
+ 
+-  gpsPOIMenu.name = "GPS POI";
++  #ifdef HAS_GPS
++    gpsPOIMenu.name = "GPS POI";
++  #endif
+ 
+   // Build Main Menu
+   mainMenu.parentMenu = NULL;

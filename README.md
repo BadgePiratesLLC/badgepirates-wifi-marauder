@@ -74,6 +74,7 @@ git clone https://github.com/BadgePiratesLLC/badgepirates-wifi-marauder.git
 cd badgepirates-wifi-marauder
 git checkout develop
 git submodule update --init
+bash patches/apply.sh  # small compile-compat patches upstream can't take (see patches/apply.sh)
 
 # 3. Connect badge via USB-C
 

@@ -40,6 +40,7 @@
 #define THEME_CARD_MIN_H    44          // spec floor: every tappable row >= 44px tall
 #define THEME_BATT_W        30          // battery glyph width, top-right corner, every screen
 #define THEME_BATT_H        14
+#define THEME_ROOT_BRAND_H  16          // device-name strip under the header, root screen only
 
 // ---- Motion (restraint: instant feedback, no spinners) ----
 // Pressed state is drawn synchronously on touch-down; there is no
