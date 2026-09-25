@@ -2,16 +2,17 @@
 
 ESP32Marauder port for the BadgePirates ESP32-S3 conference badges.
 
-## Badge Compatibility
+## Badge / Environment Matrix
 
-| Badge | Hardware | Display | Status |
-|-------|----------|---------|--------|
-| CC14 | Compatible | Works | ✅ Supported — build with `env:bsideskc-badge` |
-| BSidesKC26 | Compatible | Works | ✅ Supported — build with `env:bsideskc-badge` |
-| CC13 | Compatible | Works | ✅ Supported — build with `env:bsideskc-badge-cc13` |
-| BSidesKC25 | Compatible | Works | ✅ Supported — build with `env:bsideskc-badge-cc13` |
+One firmware, one repo, per-board config headers behind a `BADGE_HW_*` build flag (Nexus b5a17dba) — no board is "the default" env anymore.
 
-**CC13 / BSidesKC25 display — orientation fix (Nexus 2977d950):** On these two badge years, the screen was mounted on the *back* of the board instead of the front, so the panel is physically rotated 180° relative to CC14/BSidesKC26. Confirmed against the CC13 schematic (`BadgePiratesLLC/Project-CC13`, `CAD/Screens.kicad_sch`) that this is orientation-only — all 11 display/touch GPIOs match `include/bsideskc_pins.h` exactly, no pin remap. The fix is a `BADGE_HW_CC13` build flag (new `env:bsideskc-badge-cc13` PlatformIO environment) that flips `SCREEN_ORIENTATION` to TFT_eSPI rotation 3 (180°-flipped landscape) and mirrors the FT6336U touch-coordinate mapping in `include/XPT2046_Touchscreen.h` to match. CC14/BSidesKC26 (`env:bsideskc-badge`) is untouched. **Verified on physical hardware by Kevin, 2026-09-24** (CC13 on GAMINGCRAP COM3): display renders right side up, touch lands where pressed.
+| Badge | PlatformIO env | What's different | Verified date | Verified by |
+|-------|-----------------|-------------------|----------------|-------------|
+| CC14 / BSidesKC26 | `bsideskc-badge-cc14` (alias: `bsideskc-badge`, kept so existing scripts/docs don't break) | Baseline — panel front-mounted, `SCREEN_ORIENTATION 1`, un-mirrored FT6336U touch mapping | 2026-09-24 (as the then-default `bsideskc-badge` env, pre-rename) | Kevin |
+| CC13 / BSidesKC25 | `bsideskc-badge-cc13` | `BADGE_HW_CC13`: panel back-mounted, rotated 180° (`SCREEN_ORIENTATION 3`), FT6336U touch endpoints reversed to match. Pins identical to CC14 (Nexus 2977d950). | 2026-09-24 (GAMINGCRAP COM3) | Kevin |
+| CC15 | not yet added | **Unknown.** Do not assume it matches CC14 — asked Bucky on the bulletin (Nexus b5a17dba) whether the panel (ILI9341-class), digitizer (FT6336U), rotary encoder, NeoPixel, and fuel-gauge parts match, and whether the panel is front- or back-mounted. If the answer is a pin remap rather than an orientation-only delta, that's a separate ticket with Bucky, not a flag bodged in here. | — | — |
+
+**CC13 / BSidesKC25 display — orientation fix (Nexus 2977d950):** On these two badge years, the screen was mounted on the *back* of the board instead of the front, so the panel is physically rotated 180° relative to CC14/BSidesKC26. Confirmed against the CC13 schematic (`BadgePiratesLLC/Project-CC13`, `CAD/Screens.kicad_sch`) that this is orientation-only — all 11 display/touch GPIOs match `include/bsideskc_pins.h` exactly, no pin remap. The fix is a `BADGE_HW_CC13` build flag (`env:bsideskc-badge-cc13` PlatformIO environment) that flips `SCREEN_ORIENTATION` to TFT_eSPI rotation 3 (180°-flipped landscape) and mirrors the FT6336U touch-coordinate mapping in `include/XPT2046_Touchscreen.h` to match. CC14/BSidesKC26 (`env:bsideskc-badge-cc14`, alias `env:bsideskc-badge`) is untouched. **Verified on physical hardware by Kevin, 2026-09-24** (CC13 on GAMINGCRAP COM3): display renders right side up, touch lands where pressed.
 
 ## 🎉 v1.1.0 — Production Ready
 

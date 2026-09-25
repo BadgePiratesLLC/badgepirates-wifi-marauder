@@ -95,6 +95,9 @@
   // include/XPT2046_Touchscreen.h is mirrored to match.
   #define SCREEN_ORIENTATION 3  // Landscape, 180° flipped (320×240)
 #else
+  // CC14/BSidesKC26 (BADGE_HW_CC14) default. CC15 has no branch yet — its
+  // panel/digitizer/mount orientation are unconfirmed (Nexus b5a17dba,
+  // asked Bucky). Do not assume it belongs in this branch until he answers.
   #define SCREEN_ORIENTATION  1  // Landscape (320×240)
 #endif
 
