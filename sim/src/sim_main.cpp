@@ -59,6 +59,7 @@ void sim_capture_frame(const char* label) {
   g_sim.encPress = true;
 }
 extern void ledBrightnessOptionsScreen();  // SIM_BUILD gives this external linkage
+extern void showBatteryStatus();  // same seam, same reason (Nexus c39cd3b3 QA fix)
 
 // One real loop() tick, split so the harness can screenshot in between the
 // two draw owners — main.cpp itself calls these back-to-back every
@@ -335,6 +336,14 @@ int main(int argc, char** argv) {
     sim_advance_millis(31000);
     fixedTap(120, 116);  // into WiFi submenu
     shot(outdir + "/14_statusbar_submenu.png");
+
+    // Carla's QA FAIL on this ticket: showBatteryStatus() was a raw-TFT
+    // screen that wiped the bar entirely. This is the regression check -
+    // the bar (and Back) must still be on screen inside that legacy
+    // reachable screen too, same as every LVGL screen above.
+    s_captureLabel = "battery_status";
+    s_capturePath = outdir + "/15_statusbar_battery_screen.png";
+    showBatteryStatus();
 
     return 0;
   }

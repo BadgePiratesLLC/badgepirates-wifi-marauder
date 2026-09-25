@@ -190,7 +190,14 @@ void ledBrightnessOptionsScreen();
 #else
 static void ledBrightnessOptionsScreen();
 #endif
+#ifdef SIM_BUILD
+// Same reasoning as ledBrightnessOptionsScreen() above: sim_main.cpp needs
+// a direct seam into this screen to render/verify it (Nexus c39cd3b3 QA
+// FAIL fix - this screen used to skip the status bar entirely).
+void showBatteryStatus();
+#else
 static void showBatteryStatus();
+#endif
 static void toggleBuzzerMute();
 static void runHwTest();
 static void settingsScreen();
@@ -648,31 +655,92 @@ static void ledBrightnessOptionsScreen() {
 // ---------------------------------------------------------------------
 // Battery Status / Buzzer toggle / HW test - not full-restyle targets
 // this half, but they're reachable from the touch-first Badge submenu
-// now, so they must not be touch dead-ends (req #4). Minimal fix: honor
-// a tap-anywhere-to-return alongside the existing encoder/button exit.
+// now, so they must not be touch dead-ends (req #4).
+//
+// showBatteryStatus() used to be a raw TFT_eSPI screen that called
+// display_obj.clearScreen() and drew straight to the panel - which wiped
+// the persistent status bar entirely (Carla's c39cd3b3 QA FAIL: "not
+// actually persistent on every screen"). Rebuilt on the same
+// lvRepaintBegin/lvRepaintEnd + s_lvContent pattern every other screen in
+// this file uses, so the bar (and Back control) survive here too.
 // ---------------------------------------------------------------------
 
+#ifdef SIM_BUILD
+void showBatteryStatus() {
+#else
 static void showBatteryStatus() {
-  display_obj.clearScreen();
-  badge_display.drawCenteredTitle("Battery Status");
+#endif
+  badgeNavPush(showBatteryStatus, "Battery Status");
 
   int8_t pct = batteryGetPercent();
-  uint16_t color = (pct > 50) ? UI_COLOR_OK : (pct > 20) ? UI_COLOR_WARN : UI_COLOR_ERR;
-  display_obj.tft.setTextColor(color, UI_COLOR_BG);
-  display_obj.tft.drawCentreString(String(pct) + "%", TFT_WIDTH / 2, 70, 4);
+  uint16_t color = (pct < 0) ? THEME_TEXT_MUTED : (pct > 50) ? THEME_OK : (pct > 20) ? THEME_WARN : THEME_ERROR;
 
-  badge_display.drawProgressBar(UI_BAR_MARGIN, 130, TFT_WIDTH - UI_BAR_MARGIN * 2, UI_BAR_H, max(0, (int)pct), color);
-  badge_display.drawStatusHint("Tap anywhere or press knob to return");
+  auto render = [&](bool backPressed) {
+    lvRepaintBegin("Battery Status", /*isRoot=*/false, backPressed);
 
+    uint16_t contentY = chromeTop(false) - THEME_STATUSBAR_H;
+
+    lv_obj_t* pctLabel = lv_label_create(s_lvContent);
+    if (pct < 0) {
+      lv_label_set_text(pctLabel, "--");
+    } else {
+      lv_label_set_text_fmt(pctLabel, "%d%%", pct);
+    }
+    lv_obj_set_style_text_color(pctLabel, cardkit_color(color), 0);
+    lv_obj_set_style_text_font(pctLabel, &lv_font_montserrat_12, 0);
+    lv_obj_align(pctLabel, LV_ALIGN_TOP_MID, 0, contentY + THEME_SPACE_LG);
+
+    uint16_t barY = contentY + THEME_SPACE_LG + 40;
+    uint16_t barW = TFT_WIDTH - UI_BAR_MARGIN * 2;
+
+    lv_obj_t* barBg = lv_obj_create(s_lvContent);
+    lv_obj_remove_flag(barBg, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_pos(barBg, UI_BAR_MARGIN, barY);
+    lv_obj_set_size(barBg, barW, UI_BAR_H);
+    lv_obj_set_style_bg_color(barBg, cardkit_color(THEME_SURFACE), 0);
+    lv_obj_set_style_border_color(barBg, cardkit_color(THEME_BORDER), 0);
+    lv_obj_set_style_border_width(barBg, 1, 0);
+    lv_obj_set_style_radius(barBg, THEME_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(barBg, 0, 0);
+
+    if (pct >= 0) {
+      int fillW = (int)barW * max(0, (int)pct) / 100;
+      lv_obj_t* barFill = lv_obj_create(barBg);
+      lv_obj_remove_flag(barFill, LV_OBJ_FLAG_SCROLLABLE);
+      lv_obj_set_pos(barFill, 0, 0);
+      lv_obj_set_size(barFill, fillW, UI_BAR_H);
+      lv_obj_set_style_bg_color(barFill, cardkit_color(color), 0);
+      lv_obj_set_style_border_width(barFill, 0, 0);
+      lv_obj_set_style_radius(barFill, THEME_RADIUS_SM, 0);
+    }
+
+    cardkit_create_hint(s_lvContent, pct < 0 ? "Battery sensor unavailable" : "Press Back or knob to return",
+                         TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_LG - THEME_STATUSBAR_H);
+    lvRepaintEnd();
+  };
+
+  render(false);
+  SIM_FRAME("battery_status");
+
+  TapDetector tap;
+  bool lastBackPressed = false;
   while (true) {
-    uint16_t tx, ty;
-    if (touchRead(&tx, &ty)) break;
-    if (encoder_button_pressed()) break;
-    #ifdef HAS_BUTTONS
-      if (digitalRead(D_BTN) == LOW) break;
-    #endif
-    delay(50);
+    statusbar_pollIndicators(millis());
+    lv_refr_now(nullptr);
+
+    TouchZone zones[1] = {{kBackRect, ZONE_BACK}};
+    int fired = tap.poll(zones, 1);
+    bool backPressed = tap.isPressed(ZONE_BACK);
+    if (backPressed != lastBackPressed) {
+      render(backPressed);
+      lastBackPressed = backPressed;
+    }
+
+    if (fired == ZONE_BACK || encoder_button_pressed()) break;
+    delay(30);
   }
+
+  badgeNavPop();
 }
 
 static void toggleBuzzerMute() {
