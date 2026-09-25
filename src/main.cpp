@@ -366,16 +366,23 @@ void loop() {
     batteryMonitorUpdate(currentTime);
   #endif
 
+  // ---- Screen ownership (Nexus 78e62be0 half 2 hardware failure) ----
+  // Half 2 called menu_function_obj.main() and badgeMenuLoop()
+  // unconditionally, every tick - both read touch, both drew to the same
+  // panel, with nothing to say which one should win. That's what produced
+  // "cards overlay upstream menu" and double/wrong-fired taps on the real
+  // badge (Kevin, 2026-09-24), reproduced headless and proven in the
+  // simulator (Nexus 0f35e128, sim/README.md) before this fix was written.
+  //
+  // badgeMenuOwnsScreen() is the single source of truth for who owns the
+  // display this tick: badgeMenuLoop() when it's true (a menu, not a
+  // scan/attack screen), upstream's own menu_function_obj.main() when it's
+  // false. Exactly one of the two ever touches touch/screen state per tick
+  // now - not a guess, not a timing accident.
   #ifdef HAS_SCREEN
-    menu_function_obj.main(currentTime);
-  #endif
-
-  // ---- Touch-first menu navigation (Nexus 78e62be0 half 2) ----
-  // badgeMenuLoop() renders whatever Menu upstream's MenuFunctions tree
-  // currently holds as cards and drives it from touch + encoder alike;
-  // it no-ops itself whenever a scan/attack screen owns the display
-  // instead of a menu. See src/hardware/badge_menu.cpp for the adapter.
-  #ifdef HAS_SCREEN
+    if (!badgeMenuOwnsScreen()) {
+      menu_function_obj.main(currentTime);
+    }
     badgeMenuLoop();
   #endif
 

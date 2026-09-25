@@ -1,0 +1,51 @@
+name: UI simulator screenshots
+
+# Nexus 0f35e128: render the badge's UI as PNGs on every push that touches
+# it, no ESP32 attached. This is the "Kevin approves a design from his
+# phone instead of a workbench" step - see sim/README.md for what these
+# screenshots do and do not prove.
+
+on:
+  push:
+    paths:
+      - "src/hardware/badge_menu.*"
+      - "src/hardware/touch_input.*"
+      - "src/hardware/badge_nav.*"
+      - "include/badge_ui_theme.h"
+      - "sim/**"
+  pull_request:
+    paths:
+      - "src/hardware/badge_menu.*"
+      - "src/hardware/touch_input.*"
+      - "src/hardware/badge_nav.*"
+      - "include/badge_ui_theme.h"
+      - "sim/**"
+  workflow_dispatch: {}
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false # sim build never touches esp32marauder-upstream, see sim/README.md
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Build simulator
+        run: ./sim/build.sh
+
+      - name: Render the three review screens
+        run: |
+          ./sim/out/badge_sim root sim/out      # 01_root.png, 02_submenu.png
+          ./sim/out/badge_sim options sim/out    # 03_options.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: badge-ui-screenshots
+          path: |
+            sim/out/01_root.png
+            sim/out/02_submenu.png
+            sim/out/03_options.png
+          retention-days: 90

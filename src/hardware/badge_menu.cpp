@@ -42,6 +42,17 @@
 extern MenuFunctions menu_function_obj;
 extern Display display_obj;
 
+#ifdef SIM_BUILD
+// Test-only seam (Nexus 0f35e128): lets sim/src/sim_main.cpp capture a
+// frame from inside a blocking input loop it has no other way to reach
+// headless. SIM_BUILD is only ever defined by sim/build.sh - never by
+// platformio.ini - so this is entirely absent from the real firmware.
+extern void sim_capture_frame(const char* label);
+#define SIM_FRAME(label) sim_capture_frame(label)
+#else
+#define SIM_FRAME(label)
+#endif
+
 static Menu* s_mainMenu = nullptr;
 
 // ---------------------------------------------------------------------
@@ -116,7 +127,14 @@ static void drawCard(const CardButton& c, bool pressed) {
 // ---------------------------------------------------------------------
 
 static void drawBadgeSubmenu();
+#ifdef SIM_BUILD
+// External linkage only under SIM_BUILD, so sim_main.cpp can drive this
+// screen directly - it sits behind a blocking parent loop (drawBadgeSubmenu)
+// the harness has no other seam into. Real firmware keeps it internal.
+void ledBrightnessOptionsScreen();
+#else
 static void ledBrightnessOptionsScreen();
+#endif
 static void showBatteryStatus();
 static void toggleBuzzerMute();
 static void runHwTest();
@@ -249,10 +267,35 @@ static void adaptedGoBack(Menu* menu) {
   menu_function_obj.changeMenu(menu->parentMenu, true);
 }
 
+// adaptedActivate()/adaptedGoBack() above both call into upstream code
+// (MenuNode::callable, MenuFunctions::changeMenu) that draws upstream's OWN
+// button-list UI as a side effect (changeMenu() always runs buildButtons()+
+// displayCurrentMenu() - see MenuFunctions.cpp:3587-3735 - regardless of who
+// called it). Deferring our own repaint to "next tick" via s_needsRebuild
+// left that upstream draw as the last thing on the panel for a full loop()
+// iteration on every single navigation - the "cards overlay upstream menu"
+// flash Kevin hit on hardware, reproduced headless in the simulator (Nexus
+// 0f35e128, sim/README.md). Repainting immediately, in the same call that
+// triggered the change, means upstream's draw is never the last thing
+// shown - not "fixed next frame", never drawn as a visible frame at all.
+static void adaptedResyncNow() {
+  if (!badgeMenuOwnsScreen()) return;  // the callable took us into a scan/attack screen; not ours to draw
+  Menu* now = menu_function_obj.current_menu;
+  if (now == nullptr) return;
+  s_adaptedMenu = now;
+  adaptedRebuildBody(now);
+  adaptedRender(now, now->parentMenu == nullptr, -1, false);
+  s_needsRebuild = false;
+}
+
+bool badgeMenuOwnsScreen() {
+  return (wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
+         (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
+         (wifi_scan_obj.currentScanMode == OTA_UPDATE);
+}
+
 void badgeMenuLoop() {
-  bool inMenu = (wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
-                (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
-                (wifi_scan_obj.currentScanMode == OTA_UPDATE);
+  bool inMenu = badgeMenuOwnsScreen();
   if (!inMenu) {
     s_wasInMenu = false;
     return;  // a scan/attack screen owns the display; not our concern this half
@@ -293,6 +336,7 @@ void badgeMenuLoop() {
   }
   if (encoder_button_pressed()) {
     adaptedActivate(menu, s_selRow);
+    adaptedResyncNow();
     return;
   }
 
@@ -321,9 +365,11 @@ void badgeMenuLoop() {
 
   if (fired == ZONE_BACK) {
     adaptedGoBack(menu);
+    adaptedResyncNow();
   } else if (fired >= 0 && fired < s_bodyCount) {
     s_selRow = fired;
     adaptedActivate(menu, fired);
+    adaptedResyncNow();
   }
 }
 
@@ -416,7 +462,11 @@ static void drawBadgeSubmenu() {
 // works as a secondary input (rotate to move selection).
 // ---------------------------------------------------------------------
 
+#ifdef SIM_BUILD
+void ledBrightnessOptionsScreen() {
+#else
 static void ledBrightnessOptionsScreen() {
+#endif
   badgeNavPush(ledBrightnessOptionsScreen, "LED Brightness");
 
   const uint8_t levels[] = {5, 15, 33, 66, 100, 150, 200, 255};
@@ -456,6 +506,7 @@ static void ledBrightnessOptionsScreen() {
 
   render(-1);
   led_feedback_set_brightness(levels[idx]);
+  SIM_FRAME("led_brightness");
 
   TapDetector tap;
   int lastPressed = -1;
