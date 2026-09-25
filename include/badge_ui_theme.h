@@ -62,13 +62,24 @@
 #define THEME_FONT_LG       4   // large - titles, values
 
 // ---- Chrome layout (derived from screen size, not hand-picked per screen) ----
-#define THEME_HEADER_H      28          // header bar height (title + battery live here)
-#define THEME_BACK_W        64          // Back control width
-#define THEME_BACK_H        (THEME_HEADER_H - 4)
 #define THEME_CARD_MIN_H    44          // spec floor: every tappable row >= 44px tall
-#define THEME_BATT_W        30          // battery glyph width, top-right corner, every screen
-#define THEME_BATT_H        14
-#define THEME_ROOT_BRAND_H  16          // device-name strip under the header, root screen only
+
+// ---- Persistent status bar (Nexus c39cd3b3) ----
+// ONE bar, built once under the LVGL screen root and updated in place -
+// see UI/StatusBar.h. This replaces the old per-screen THEME_HEADER_H
+// band (title + battery glyph, torn down and rebuilt on every repaint);
+// the per-screen title moves into content (cardkit_create_title) so the
+// bar itself never has to be. Height is the >=44px tap-target floor, not
+// a decorative choice - Back and the Settings gear both live here now,
+// so THEME_CARD_MIN_H's tap-target rule extends to chrome too.
+#define THEME_STATUSBAR_H   44
+#define THEME_TITLE_H       22          // per-screen title row, content-owned now (cardkit_create_title)
+#define THEME_BACK_W        48          // Back control width, icon-only (was "< Back" text) - frees room for the status cluster
+#define THEME_BACK_H        THEME_STATUSBAR_H
+#define THEME_GEAR_W        44          // Settings gear, right edge, same tap-target floor as Back
+#define THEME_BATT_W        22          // battery shell width, status-cluster icon
+#define THEME_BATT_H        12
+#define THEME_ROOT_BRAND_H  16          // device-name strip under the title, root screen only
 
 // ---- Motion (restraint: instant feedback, no spinners) ----
 // Pressed state is drawn synchronously on touch-down; there is no

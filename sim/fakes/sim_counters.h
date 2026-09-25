@@ -18,6 +18,16 @@ struct SimState {
   bool consumeEncoderUp()    { bool v = encUp;    encUp = false;    return v; }
   bool consumeEncoderDown()  { bool v = encDown;  encDown = false;  return v; }
   bool consumeEncoderPress() { bool v = encPress; encPress = false; return v; }
+
+  // Status bar (Nexus c39cd3b3) - scripted radio/clock state so the
+  // harness can render every combination the real bar has to handle
+  // (WiFi/BT on vs. off, clock synced vs. never-synced, battery unknown
+  // vs. a real reading), not just whatever main.cpp's stubs default to.
+  bool wifiUp = false;
+  bool bluetoothUp = false;
+  bool ntpSynced = false;
+  const char* ntpTimeStr = "00:00";
+  int8_t battPct = 80;  // -1 = no sense path detected (hw_stubs.cpp mirrors real firmware's meaning)
 };
 
 extern SimState g_sim;

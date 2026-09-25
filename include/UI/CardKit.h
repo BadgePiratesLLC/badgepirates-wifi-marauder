@@ -50,14 +50,13 @@ struct CardSpec {
 // "clear and rebuild" shape badge_menu.cpp already used for raw tft draws.
 lv_obj_t* cardkit_create_card(lv_obj_t* parent, const CardSpec& spec);
 
-// Header band: title, optional "CC13" subtitle line (root only), battery
-// glyph pinned top-right. Matches THEME_HEADER_H/THEME_BATT_W/THEME_BATT_H.
-lv_obj_t* cardkit_create_header(lv_obj_t* parent, const char* title, bool isRoot, int batteryPct);
-
-// Persistent Back control, fixed geometry (THEME_BACK_W x THEME_BACK_H at
-// 0,0) matching badge_menu.cpp's kBackRect hit-test zone - this only ever
-// needs to be repainted to match a pressed state, never repositioned.
-lv_obj_t* cardkit_create_back_button(lv_obj_t* parent, bool pressed);
+// Per-screen title, content-owned (Nexus c39cd3b3): the header band and
+// battery glyph this used to draw moved into the persistent
+// UI/StatusBar.h so they stop being torn down and rebuilt on every
+// repaint; this is what's left - title text, centered, plus the root-only
+// "CC13" subtitle line. Reserve THEME_TITLE_H (+ THEME_ROOT_BRAND_H on
+// root) below it before drawing the first card row.
+lv_obj_t* cardkit_create_title(lv_obj_t* parent, const char* title, bool isRoot);
 
 // Centered hint/placeholder text in the muted colour (e.g. "Nothing here
 // yet", the "N-M of T" pager, "Tap a level to apply").

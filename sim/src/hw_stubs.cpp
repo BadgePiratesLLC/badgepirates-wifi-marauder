@@ -17,7 +17,10 @@
 #include "hardware/input_test.h"
 #include "hardware/power_manager.h"
 #include "hardware/display_adapter.h"
+#include "hardware/radio_status.h"
+#include "hardware/ntp_clock.h"
 #include "sim_counters.h"
+#include <cstdio>
 
 // ---- buzzer ----
 static bool s_muted = false;
@@ -32,8 +35,16 @@ void batteryMonitorInit() {}
 void batteryMonitorUpdate(uint32_t) {}
 bool batteryIsLow() { return false; }
 bool batteryIsCritical() { return false; }
-int8_t batteryGetPercent() { return 80; }
+int8_t batteryGetPercent() { return g_sim.battPct; }
 float batteryGetVoltage() { return 4.0f; }
+
+// ---- status bar radio/clock state (Nexus c39cd3b3) - harness-scripted,
+// not read from any real radio/RTC; see sim_counters.h ----
+bool wifiIsUp() { return g_sim.wifiUp; }
+bool bluetoothIsUp() { return g_sim.bluetoothUp; }
+void ntpClockUpdate(bool, uint32_t) {}
+bool ntpIsSynced() { return g_sim.ntpSynced; }
+void ntpGetTimeString(char* buf, size_t bufLen) { snprintf(buf, bufLen, "%s", g_sim.ntpTimeStr); }
 
 // ---- LED ring ----
 static uint8_t s_ledBrightness = 33;

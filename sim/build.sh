@@ -60,6 +60,7 @@ clang++ -std=c++17 "${COMMON_FLAGS[@]}" \
   src/hardware/badge_nav.cpp \
   src/hardware/splash_screen.cpp \
   src/UI/CardKit.cpp \
+  src/UI/StatusBar.cpp \
   src/UI/img_bp_skull.c \
   "${LVGL_OBJS[@]}" \
   -lz \

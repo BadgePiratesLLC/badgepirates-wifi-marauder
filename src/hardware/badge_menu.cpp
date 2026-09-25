@@ -39,6 +39,7 @@
 #include "touch_input.h"
 #include "badge_nav.h"
 #include "UI/CardKit.h"
+#include "UI/StatusBar.h"
 #include "hardware/lv_disp_port.h"
 
 extern MenuFunctions menu_function_obj;
@@ -63,7 +64,9 @@ static Menu* s_mainMenu = nullptr;
 // ---------------------------------------------------------------------
 
 static const UiRect kBackRect = {0, 0, THEME_BACK_W, THEME_BACK_H};
-static const uint8_t ZONE_BACK = 250;  // reserved id, screens use 0..N for their own controls
+static const UiRect kGearRect = {TFT_WIDTH - THEME_GEAR_W, 0, THEME_GEAR_W, THEME_STATUSBAR_H};
+static const uint8_t ZONE_BACK = 250;  // reserved ids, screens use 0..N for their own controls
+static const uint8_t ZONE_GEAR = 249;
 
 // ---------------------------------------------------------------------
 // LVGL screen (Nexus 84f4e52c: LVGL port, "better buttons"). One
@@ -74,9 +77,17 @@ static const uint8_t ZONE_BACK = 250;  // reserved id, screens use 0..N for thei
 // compositing) doing the drawing instead of raw TFT_eSPI primitives. See
 // UI/CardKit.h for why this is safe to bolt onto the existing
 // TapDetector/encoder control flow below unchanged.
+//
+// Nexus c39cd3b3 split this screen into two permanent children: the
+// status bar (UI/StatusBar.h - battery/WiFi/BT/clock/Back/gear, built
+// once, never cleaned) and s_lvContent (everything screen-specific,
+// cleaned and rebuilt on every repaint exactly like the old code cleaned
+// the whole screen). That split is the actual fix the ticket asked for -
+// the bar stops being torn down and redrawn on every single navigation.
 // ---------------------------------------------------------------------
 
 static lv_obj_t* s_lvScreen = nullptr;
+static lv_obj_t* s_lvContent = nullptr;
 
 static lv_obj_t* lvScreen() {
   if (!s_lvScreen) {
@@ -88,19 +99,50 @@ static lv_obj_t* lvScreen() {
     lv_obj_set_style_pad_all(s_lvScreen, 0, 0);
     lv_obj_set_style_border_width(s_lvScreen, 0, 0);
     lv_scr_load(s_lvScreen);
+
+    statusbar_create(s_lvScreen);
+    // Populate it immediately, not on the next tick - a cold-start path
+    // that reaches a non-root screen before badgeMenuLoop() ever runs a
+    // full tick (e.g. jumping straight to a bespoke screen) would
+    // otherwise show an empty battery outline / dim icons for one frame
+    // that isn't actually representative of anything.
+    statusbar_pollIndicators(millis());
+
+    s_lvContent = lv_obj_create(s_lvScreen);
+    lv_obj_remove_flag(s_lvContent, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_pos(s_lvContent, 0, THEME_STATUSBAR_H);
+    lv_obj_set_size(s_lvContent, TFT_WIDTH, TFT_HEIGHT - THEME_STATUSBAR_H);
+    lv_obj_set_style_bg_opa(s_lvContent, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_lvContent, 0, 0);
+    lv_obj_set_style_pad_all(s_lvContent, 0, 0);
   }
   return s_lvScreen;
 }
 
-// Clears the screen and rebuilds chrome: header band (title + battery,
-// cardkit_create_header() draws the "CC13" root subtitle itself when
-// isRoot) and the persistent Back control when !isRoot. Callers add their
-// own cards/content after this returns, then call lvRepaintEnd().
-static void lvRepaintBegin(const char* title, bool isRoot, bool backPressed) {
+// Clears ONLY the content area and redraws the per-screen title
+// (cardkit_create_title() - the root-only "CC13" subtitle lives there
+// too now). The status bar is a separate object one level up in
+// lvScreen() and is never touched here - statusbar_setChrome() updates
+// its Back/gear visuals in place instead of rebuilding anything. Callers
+// add their own cards/content after this returns, then call lvRepaintEnd().
+static void lvRepaintBegin(const char* title, bool isRoot, bool backPressed, bool gearPressed = false) {
   lv_obj_t* screen = lvScreen();
-  lv_obj_clean(screen);
-  cardkit_create_header(screen, title, isRoot, batteryGetPercent());
-  if (!isRoot) cardkit_create_back_button(screen, backPressed);
+  statusbar_setChrome(/*showBack=*/!isRoot, backPressed, gearPressed);
+  lv_obj_clean(s_lvContent);
+  cardkit_create_title(s_lvContent, title, isRoot);
+
+  // Force the WHOLE screen (bar included) to actually be re-flushed, not
+  // just whatever LVGL's own dirty tracking thinks changed. showBatteryStatus()/
+  // toggleBuzzerMute()/runHwTest() below still draw straight to
+  // display_obj.tft (raw TFT_eSPI, pre-dating this port - "not full-restyle
+  // targets this half," see their own comment) and can physically clobber
+  // the bar's pixels with zero visibility into LVGL's invalidation state.
+  // Before Nexus c39cd3b3, every repaint rebuilt the header from scratch,
+  // which self-healed this for free; the bar not being rebuilt per screen
+  // is the entire point now, so this one-line invalidate replaces that
+  // free side effect on purpose - "must survive... or it is not a status
+  // bar" applies here too.
+  lv_obj_invalidate(screen);
 }
 
 // Instant, synchronous flush - THEME_NO_ARTIFICIAL_DELAY still applies,
@@ -126,9 +168,13 @@ struct CardButton {
   bool navigable;         // chevron affordance; false for inline toggles/values
 };
 
+// c.rect.y is absolute screen-space (that's what touch input needs -
+// see chromeTop() below); cardkit_create_card() draws into s_lvContent,
+// whose own y=0 is THEME_STATUSBAR_H further down the panel, so the y
+// passed to LVGL is translated here, once, rather than at every call site.
 static lv_obj_t* drawCard(const CardButton& c, bool pressed) {
-  CardSpec spec{c.rect.x, c.rect.y, c.rect.w, c.rect.h, c.title, c.subtitle, c.selected, pressed, c.navigable};
-  return cardkit_create_card(lvScreen(), spec);
+  CardSpec spec{c.rect.x, (int16_t)(c.rect.y - THEME_STATUSBAR_H), c.rect.w, c.rect.h, c.title, c.subtitle, c.selected, pressed, c.navigable};
+  return cardkit_create_card(s_lvContent, spec);
 }
 
 // ---------------------------------------------------------------------
@@ -147,6 +193,17 @@ static void ledBrightnessOptionsScreen();
 static void showBatteryStatus();
 static void toggleBuzzerMute();
 static void runHwTest();
+static void settingsScreen();
+
+// Absolute (screen-space) y where card rows start - status bar + title
+// row + the root-only brand line + breathing room. "Absolute" matters:
+// touch input is raw panel coordinates, so every UiRect zone below stays
+// absolute; only drawCard()/cardkit_create_hint() translate into
+// s_lvContent's own coordinate space (content starts at
+// THEME_STATUSBAR_H - see lvScreen()).
+static uint16_t chromeTop(bool isRoot) {
+  return THEME_STATUSBAR_H + THEME_TITLE_H + (isRoot ? THEME_ROOT_BRAND_H : 0) + THEME_SPACE_MD;
+}
 
 // ---------------------------------------------------------------------
 // Generic adapter (half 2): renders ANY upstream Menu - mainMenu itself
@@ -166,6 +223,7 @@ static int     s_selRow = 0;                          // index into s_bodyRaw - 
 static int     s_pageStart = 0;
 static int     s_pressedRow = -1;                     // live touch-down visual, -1 = none
 static bool    s_backPressed = false;
+static bool    s_gearPressed = false;
 static TapDetector s_adaptedTap;
 
 // Upstream prepends a MenuNode named "Back" to every non-root submenu
@@ -188,13 +246,14 @@ static void adaptedRebuildBody(Menu* menu) {
   s_pageStart = 0;
   s_pressedRow = -1;
   s_backPressed = false;
+  s_gearPressed = false;
 }
 
 // How many card rows fit below the chrome. Derived from the theme, not
 // hand-picked per menu - a menu with more items than this just pages
 // (encoder scrolls it into view; see the "N-M of T" indicator below).
 static int adaptedMaxVisible(bool isRoot) {
-  uint16_t top = THEME_HEADER_H + (isRoot ? THEME_ROOT_BRAND_H : 0) + THEME_SPACE_MD;
+  uint16_t top = chromeTop(isRoot);
   uint16_t bottom = THEME_SPACE_MD;
   int avail = (int)TFT_HEIGHT - (int)top - (int)bottom;
   int n = (avail + THEME_SPACE_SM) / (THEME_CARD_MIN_H + THEME_SPACE_SM);
@@ -202,7 +261,7 @@ static int adaptedMaxVisible(bool isRoot) {
 }
 
 static UiRect adaptedRowRect(int visualRow, bool isRoot) {
-  uint16_t top = THEME_HEADER_H + (isRoot ? THEME_ROOT_BRAND_H : 0) + THEME_SPACE_MD;
+  uint16_t top = chromeTop(isRoot);
   uint16_t x = THEME_SPACE_MD;
   uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
   uint16_t y = top + visualRow * (THEME_CARD_MIN_H + THEME_SPACE_SM);
@@ -218,9 +277,9 @@ static void adaptedEnsurePageVisible(int maxVisible) {
   if (s_pageStart > maxStart) s_pageStart = maxStart;
 }
 
-static void adaptedRender(Menu* menu, bool isRoot, int pressedRow, bool backPressed) {
+static void adaptedRender(Menu* menu, bool isRoot, int pressedRow, bool backPressed, bool gearPressed = false) {
   const char* title = isRoot ? "BADGE PIRATES" : menu->name.c_str();
-  lvRepaintBegin(title, isRoot, backPressed);
+  lvRepaintBegin(title, isRoot, backPressed, gearPressed);
 
   int maxVisible = adaptedMaxVisible(isRoot);
   adaptedEnsurePageVisible(maxVisible);
@@ -239,11 +298,11 @@ static void adaptedRender(Menu* menu, bool isRoot, int pressedRow, bool backPres
   }
 
   if (s_bodyCount == 0) {
-    cardkit_create_hint(lvScreen(), "Nothing here yet", TFT_WIDTH / 2, adaptedRowRect(0, isRoot).y + 10);
+    cardkit_create_hint(s_lvContent, "Nothing here yet", TFT_WIDTH / 2, adaptedRowRect(0, isRoot).y + 10 - THEME_STATUSBAR_H);
   } else if (s_bodyCount > maxVisible) {
     char buf[20];
     snprintf(buf, sizeof(buf), "%d-%d of %d", s_pageStart + 1, s_pageStart + shown, s_bodyCount);
-    cardkit_create_hint(lvScreen(), buf, TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_MD - 8);
+    cardkit_create_hint(s_lvContent, buf, TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_MD - 8 - THEME_STATUSBAR_H);
   }
 
   lvRepaintEnd();
@@ -310,6 +369,17 @@ void badgeMenuLoop() {
   if (!s_wasInMenu) s_needsRebuild = true;
   s_wasInMenu = true;
 
+  // Battery/WiFi/BT/clock can change with zero navigation at all (WiFi
+  // associates while the user just sits on a menu) - poll every tick,
+  // not just on repaint. Cheap: statusbar_pollIndicators() diffs before
+  // touching any LVGL object, and lv_refr_now() is a no-op fast path
+  // when nothing is actually dirty. lvScreen() first: on the very first
+  // tick nothing has built the bar yet, and statusbar_pollIndicators()
+  // touches its objects unconditionally.
+  lvScreen();
+  statusbar_pollIndicators(millis());
+  lv_refr_now(nullptr);
+
   Menu* menu = menu_function_obj.current_menu;
   if (menu == nullptr) return;
   bool isRoot = (menu->parentMenu == nullptr);
@@ -346,9 +416,10 @@ void badgeMenuLoop() {
   }
 
   // --- Touch: primary input ---
-  TouchZone zones[MAX_ADAPTED_NODES + 1];
+  TouchZone zones[MAX_ADAPTED_NODES + 2];
   int n = 0;
   if (!isRoot) zones[n++] = {kBackRect, ZONE_BACK};
+  zones[n++] = {kGearRect, ZONE_GEAR};  // gear: every screen, root included
   int shown = min(maxVisible, s_bodyCount - s_pageStart);
   for (int row = 0; row < shown; row++) {
     zones[n++] = {adaptedRowRect(row, isRoot), (uint8_t)(s_pageStart + row)};
@@ -362,14 +433,21 @@ void badgeMenuLoop() {
     if (s_adaptedTap.isPressed((uint8_t)bodyIdx)) pressedRow = bodyIdx;
   }
   bool backPressed = !isRoot && s_adaptedTap.isPressed(ZONE_BACK);
-  if (pressedRow != s_pressedRow || backPressed != s_backPressed) {
+  bool gearPressed = s_adaptedTap.isPressed(ZONE_GEAR);
+  if (pressedRow != s_pressedRow || backPressed != s_backPressed || gearPressed != s_gearPressed) {
     s_pressedRow = pressedRow;
     s_backPressed = backPressed;
-    adaptedRender(menu, isRoot, pressedRow, backPressed);
+    s_gearPressed = gearPressed;
+    adaptedRender(menu, isRoot, pressedRow, backPressed, gearPressed);
   }
 
   if (fired == ZONE_BACK) {
     adaptedGoBack(menu);
+    adaptedResyncNow();
+  } else if (fired == ZONE_GEAR) {
+    powerManagerResetActivity();
+    buzzerPlay(TONE_BUTTON_PRESS);
+    settingsScreen();
     adaptedResyncNow();
   } else if (fired >= 0 && fired < s_bodyCount) {
     s_selRow = fired;
@@ -394,8 +472,8 @@ static void drawBadgeSubmenu() {
 #endif
 
   auto render = [&](int pressedZone) {
-    lvRepaintBegin("Badge", /*isRoot=*/false, pressedZone == ZONE_BACK);
-    uint16_t y = THEME_HEADER_H + THEME_SPACE_MD;
+    lvRepaintBegin("Badge", /*isRoot=*/false, pressedZone == ZONE_BACK, pressedZone == ZONE_GEAR);
+    uint16_t y = chromeTop(false);
     uint16_t rowH = THEME_CARD_MIN_H;
     uint16_t x = THEME_SPACE_MD;
     uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
@@ -426,14 +504,18 @@ static void drawBadgeSubmenu() {
   TapDetector tap;
   int lastPressed = 0;
   while (true) {
-    uint16_t y = THEME_HEADER_H + THEME_SPACE_MD;
+    statusbar_pollIndicators(millis());  // this loop blocks badgeMenuLoop()'s own poll - see its comment
+    lv_refr_now(nullptr);
+
+    uint16_t y = chromeTop(false);
     uint16_t rowH = THEME_CARD_MIN_H;
     uint16_t x = THEME_SPACE_MD;
     uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
 
-    TouchZone zones[5];
+    TouchZone zones[6];
     int n = 0;
     zones[n++] = {kBackRect, ZONE_BACK};
+    zones[n++] = {kGearRect, ZONE_GEAR};
     zones[n++] = {{x, y, w, rowH}, Z_LED}; y += rowH + THEME_SPACE_SM;
     zones[n++] = {{x, y, w, rowH}, Z_BUZZ}; y += rowH + THEME_SPACE_SM;
     zones[n++] = {{x, y, w, rowH}, Z_BATT}; y += rowH + THEME_SPACE_SM;
@@ -450,6 +532,7 @@ static void drawBadgeSubmenu() {
     }
 
     if (fired == ZONE_BACK || encoder_button_pressed()) break;
+    if (fired == ZONE_GEAR) { settingsScreen(); render(0); lastPressed = 0; }
     if (fired == Z_LED) { ledBrightnessOptionsScreen(); render(0); lastPressed = 0; }
     if (fired == Z_BUZZ) { toggleBuzzerMute(); render(0); lastPressed = 0; }
     if (fired == Z_BATT) { showBatteryStatus(); render(0); lastPressed = 0; }
@@ -480,7 +563,7 @@ static void ledBrightnessOptionsScreen() {
   static uint8_t idx = 2;  // default ~33, persists across visits this session
 
   const uint16_t gridX = THEME_SPACE_MD;
-  const uint16_t gridY = THEME_HEADER_H + THEME_SPACE_LG;
+  const uint16_t gridY = THEME_STATUSBAR_H + THEME_TITLE_H + THEME_SPACE_LG;
   const uint16_t cols = 4;
   const uint16_t cellW = (TFT_WIDTH - THEME_SPACE_MD * 2 - THEME_SPACE_SM * (cols - 1)) / cols;
   const uint16_t cellH = THEME_CARD_MIN_H;
@@ -492,8 +575,8 @@ static void ledBrightnessOptionsScreen() {
             (int16_t)cellW, (int16_t)cellH};
   };
 
-  auto render = [&](int pressedIdx, bool backPressed) {
-    lvRepaintBegin("LED Brightness", /*isRoot=*/false, backPressed);
+  auto render = [&](int pressedIdx, bool backPressed, bool gearPressed = false) {
+    lvRepaintBegin("LED Brightness", /*isRoot=*/false, backPressed, gearPressed);
     for (uint8_t i = 0; i < numLevels; i++) {
       UiRect r = cellRect(i);
       char buf[6];
@@ -510,7 +593,7 @@ static void ledBrightnessOptionsScreen() {
       lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
       lv_obj_center(lbl);
     }
-    cardkit_create_hint(lvScreen(), "Tap a level to apply", TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_LG);
+    cardkit_create_hint(s_lvContent, "Tap a level to apply", TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_LG - THEME_STATUSBAR_H);
     lvRepaintEnd();
   };
 
@@ -521,23 +604,31 @@ static void ledBrightnessOptionsScreen() {
   TapDetector tap;
   int lastPressed = -1;
   bool lastBackPressed = false;
+  bool lastGearPressed = false;
   while (true) {
-    TouchZone zones[9];
-    zones[0] = {kBackRect, ZONE_BACK};
-    for (uint8_t i = 0; i < numLevels; i++) zones[i + 1] = {cellRect(i), i};
+    statusbar_pollIndicators(millis());
+    lv_refr_now(nullptr);
 
-    int fired = tap.poll(zones, numLevels + 1);
+    TouchZone zones[10];
+    zones[0] = {kBackRect, ZONE_BACK};
+    zones[1] = {kGearRect, ZONE_GEAR};
+    for (uint8_t i = 0; i < numLevels; i++) zones[i + 2] = {cellRect(i), i};
+
+    int fired = tap.poll(zones, numLevels + 2);
     int pressedNow = -1;
     for (uint8_t i = 0; i < numLevels; i++) if (tap.isPressed(i)) pressedNow = i;
     bool backPressed = tap.isPressed(ZONE_BACK);
+    bool gearPressed = tap.isPressed(ZONE_GEAR);
 
-    if (pressedNow != lastPressed || backPressed != lastBackPressed) {
-      render(pressedNow, backPressed);
+    if (pressedNow != lastPressed || backPressed != lastBackPressed || gearPressed != lastGearPressed) {
+      render(pressedNow, backPressed, gearPressed);
       lastPressed = pressedNow;
       lastBackPressed = backPressed;
+      lastGearPressed = gearPressed;
     }
 
     if (fired == ZONE_BACK) break;
+    if (fired == ZONE_GEAR) { settingsScreen(); render(-1, false); }
     if (fired >= 0 && fired < numLevels) {
       idx = fired;
       led_feedback_set_brightness(levels[idx]);
@@ -594,6 +685,123 @@ static void toggleBuzzerMute() {
 static void runHwTest() {
   runInputValidationTest();
   display_obj.clearScreen();
+}
+
+// ---------------------------------------------------------------------
+// Settings - the gear's front door (Nexus c39cd3b3). There are two real
+// settings systems today: our own Badge submenu above (LED/Buzzer/
+// Battery/HW Test) and upstream's real settingsMenu (SSID/creds/etc,
+// esp32marauder-upstream/esp32_marauder/MenuFunctions.cpp:2872 -
+// already rendered by the SAME generic adapter as everything else in
+// this file, since it's just another Menu/MenuNode tree). Jared's ask on
+// this ticket: one obvious front door, nothing reachable only by the old
+// path. This screen is that front door - it doesn't rebuild either
+// system, it hands off to whichever one the user picks.
+//
+// settingsMenu and deviceMenu are PRIVATE members of MenuFunctions
+// (esp32marauder-upstream/esp32_marauder/MenuFunctions.h:150,157) - there
+// is no public Menu* to either, so navigateByNodeName() below reaches
+// settingsMenu the same way a real tap on "Device" then "Settings" cards
+// would: walking the public current_menu->list and invoking each
+// MenuNode's own public callable, exactly what adaptedActivate() already
+// does for every other node in this file. Not a private-state workaround -
+// the same public path a user's finger takes.
+//
+// One wrinkle, documented rather than hidden: settingsMenu's parentMenu
+// is fixed to &deviceMenu at upstream's own RunSetup() and is not
+// overridable per navigation context (MenuFunctions::changeMenu's only
+// other parameter is a "simple_change" bool). So Back from "Marauder"
+// below lands on upstream's own Device menu, not back on this screen -
+// one extra hop toward root, not a dead end, and Device's own title
+// still says exactly where you are. Reparenting settingsMenu to fake a
+// different Back target would risk breaking the OTHER path into
+// Settings (Device -> Settings) that still exists unchanged; not worth
+// it for one hop.
+// ---------------------------------------------------------------------
+
+// Finds a MenuNode by exact name inside `menu` and invokes its callable -
+// the same navigation a tap on that card would trigger in the generic
+// adapter, just driven programmatically. Names must match upstream's
+// lang_var.h text table exactly, trailing space included ("Device ",
+// "Settings ") - see esp32marauder-upstream/esp32_marauder/lang_var.h
+// text1_9/text1_18. If upstream ever renames these, this fails loud
+// (Serial log) rather than silently dead-ending the tap.
+static bool navigateByNodeName(Menu* menu, const char* name) {
+  if (!menu || !menu->list) return false;
+  int n = menu->list->size();
+  for (int i = 0; i < n; i++) {
+    MenuNode node = menu->list->get(i);
+    if (node.name.equals(name) && node.callable) {
+      node.callable();
+      return true;
+    }
+  }
+  return false;
+}
+
+static void settingsScreen() {
+  badgeNavPush(settingsScreen, "Settings");
+
+  enum { Z_BADGE = 1, Z_MARAUDER };
+
+  auto render = [&](int pressedZone) {
+    lvRepaintBegin("Settings", /*isRoot=*/false, pressedZone == ZONE_BACK);
+    uint16_t y = chromeTop(false);
+    uint16_t rowH = THEME_CARD_MIN_H;
+    uint16_t x = THEME_SPACE_MD;
+    uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
+
+    CardButton badge{{(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)rowH}, "Badge", "LED, buzzer, battery, HW test", false, true};
+    drawCard(badge, pressedZone == Z_BADGE);
+    y += rowH + THEME_SPACE_SM;
+
+    CardButton marauder{{(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)rowH}, "Marauder", "Upstream WiFi/BT settings", false, true};
+    drawCard(marauder, pressedZone == Z_MARAUDER);
+
+    lvRepaintEnd();
+  };
+
+  render(0);
+
+  TapDetector tap;
+  int lastPressed = 0;
+  while (true) {
+    statusbar_pollIndicators(millis());
+    lv_refr_now(nullptr);
+
+    uint16_t y = chromeTop(false);
+    uint16_t rowH = THEME_CARD_MIN_H;
+    uint16_t x = THEME_SPACE_MD;
+    uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
+
+    TouchZone zones[3];
+    int n = 0;
+    zones[n++] = {kBackRect, ZONE_BACK};
+    zones[n++] = {{(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)rowH}, Z_BADGE}; y += rowH + THEME_SPACE_SM;
+    zones[n++] = {{(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)rowH}, Z_MARAUDER};
+
+    int fired = tap.poll(zones, n);
+    int pressedNow = 0;
+    for (int i = 0; i < n; i++) if (tap.isPressed(zones[i].id)) pressedNow = zones[i].id;
+    if (pressedNow != lastPressed) {
+      render(pressedNow);
+      lastPressed = pressedNow;
+    }
+
+    if (fired == ZONE_BACK || encoder_button_pressed()) break;
+    if (fired == Z_BADGE) { drawBadgeSubmenu(); render(0); lastPressed = 0; }
+    if (fired == Z_MARAUDER) {
+      bool ok = navigateByNodeName(s_mainMenu, "Device ") &&
+                navigateByNodeName(menu_function_obj.current_menu, "Settings ");
+      if (!ok) {
+        Serial.println(F("[Settings] Could not find upstream Device->Settings path - upstream menu text may have changed"));
+      }
+      break;  // either handed off to the generic adapter, or upstream's path moved - either way, this screen is done
+    }
+    delay(30);
+  }
+
+  badgeNavPop();
 }
 
 // ---------------------------------------------------------------------

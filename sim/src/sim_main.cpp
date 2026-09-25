@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
     // (mainMenu list order set in MenuFunctionsSim::RunSetup, matching
     // production's mainMenu). Tap it, then screenshot the result.
     int before = menu_function_obj.changeMenuCallCount;
-    tap(120, 78);  // inside the WiFi card (row 0): see sim/README.md for the math
+    tap(120, 116);  // inside the WiFi card (row 0): see sim/README.md for the math
     shot(outdir + "/02_submenu.png");
 
     std::printf("changeMenu() calls caused by this one WiFi tap: %d (expect 1)\n",
@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
     tickAdapterOnly();
     shot(outdir + "/repro_00_root_cards.png");
 
-    uint16_t wifiX = 120, wifiY = 78;  // row 0 card center, see sim/README.md
+    uint16_t wifiX = 120, wifiY = 116;  // row 0 card center, see sim/README.md
     sim_set_touch(true, wifiX, wifiY);
     tickUpstreamOnly();
     tickAdapterOnly();
@@ -165,7 +165,7 @@ int main(int argc, char** argv) {
   }
 
   if (mode == "doublefire") {
-    // Bluetooth (mainMenu row 1) sits at screen y~108-152 - inside
+    // Bluetooth (mainMenu row 1) sits at screen y~146-190 - inside
     // upstream's own SELECT third (Display.cpp's menuButton() splits the
     // full panel into UP/SELECT/DOWN bands at y<106 / 106-213 / y>213,
     // regardless of where OUR cards are). A tap there can fire upstream's
@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
     int before = menu_function_obj.changeMenuCallCount;
     int buzzBefore = g_sim.ourButtonPressBuzzCount;
 
-    uint16_t btX = 120, btY = 130;
+    uint16_t btX = 120, btY = 168;
     sim_set_touch(true, btX, btY);
     tickUpstreamOnly();
     tickAdapterOnly();
@@ -223,7 +223,7 @@ int main(int argc, char** argv) {
     shot(outdir + "/fixed_00_root.png");
 
     int before = menu_function_obj.changeMenuCallCount;
-    fixedTap(120, 78);  // WiFi
+    fixedTap(120, 116);  // WiFi
     shot(outdir + "/fixed_01_after_wifi_tap.png");
     std::printf("[fixed] changeMenu() calls for the WiFi tap: %d (expect 1)\n",
                 menu_function_obj.changeMenuCallCount - before);
@@ -236,7 +236,7 @@ int main(int argc, char** argv) {
     fixedTick();
     before = menu_function_obj.changeMenuCallCount;
     int buzzBefore = g_sim.ourButtonPressBuzzCount;
-    fixedTap(120, 130);  // Bluetooth
+    fixedTap(120, 168);  // Bluetooth
     shot(outdir + "/fixed_02_after_bluetooth_tap.png");
     std::printf("[fixed] changeMenu() calls for the Bluetooth tap: %d (expect 1)\n",
                 menu_function_obj.changeMenuCallCount - before);
@@ -251,7 +251,7 @@ int main(int argc, char** argv) {
     // Nexus 84f4e52c: capture a card mid-press, between touch-down and
     // touch-up, to prove the "real pressed state" requirement (deeper
     // fill, no top highlight - not just a colour swap) actually renders,
-    // not just that the code path exists. Bluetooth (row 1, y~130 - see
+    // not just that the code path exists. Bluetooth (row 1, y~168 - see
     // the "doublefire" mode's own comment for this exact math) rather than
     // WiFi/row 0: row 0 is also the initially-selected row, whose accent
     // border would otherwise be the only visible difference in this shot.
@@ -263,10 +263,10 @@ int main(int argc, char** argv) {
     // mode's deliberately-pre-fix pattern and fires upstream's own
     // touch handling too.
     fixedTick();
-    sim_set_touch(true, 120, 130);
+    sim_set_touch(true, 120, 168);
     fixedTick();
     shot(outdir + "/04_pressed.png");
-    sim_set_touch(false, 120, 130);
+    sim_set_touch(false, 120, 168);
     fixedTick();
     return 0;
   }
@@ -299,6 +299,46 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  std::fprintf(stderr, "usage: %s [root|repro|doublefire|fixed|options|splash] [outdir]\n", argv[0]);
+  if (mode == "statusbar") {
+    // Nexus c39cd3b3's own deliverable: render the persistent status bar
+    // in the simulator, in context (the real card/button screens from
+    // 84f4e52c), across the state combinations that actually matter -
+    // not just one lucky-looking frame. g_sim's radio/clock/battery
+    // fields (sim/fakes/sim_counters.h) are the harness's only way to
+    // script these; nothing here reads a real radio or RTC.
+    fixedTick();  // root, everything off/unknown - the common case for a
+                  // device that spends its life scanning, not associated
+    shot(outdir + "/10_statusbar_off.png");
+
+    g_sim.wifiUp = true;
+    g_sim.bluetoothUp = true;
+    g_sim.ntpSynced = true;
+    g_sim.ntpTimeStr = "14:32";
+    g_sim.battPct = 62;
+    sim_advance_millis(31000);  // battery is throttled to a 30s+ poll (StatusBar.cpp) - force it to re-read
+    fixedTick();
+    shot(outdir + "/11_statusbar_on_synced.png");
+
+    g_sim.battPct = 12;  // low battery - THEME_ERROR red fill, still a real number
+    sim_advance_millis(31000);
+    fixedTick();
+    shot(outdir + "/12_statusbar_low_battery.png");
+
+    g_sim.battPct = -1;  // no sense path detected - charge-state glyph only, no digits
+    sim_advance_millis(31000);
+    fixedTick();
+    shot(outdir + "/13_statusbar_battery_unknown.png");
+
+    // Non-root screen: bar survives navigation, Back appears, cluster
+    // doesn't shift position.
+    g_sim.battPct = 62;
+    sim_advance_millis(31000);
+    fixedTap(120, 116);  // into WiFi submenu
+    shot(outdir + "/14_statusbar_submenu.png");
+
+    return 0;
+  }
+
+  std::fprintf(stderr, "usage: %s [root|repro|doublefire|fixed|options|splash|statusbar] [outdir]\n", argv[0]);
   return 1;
 }

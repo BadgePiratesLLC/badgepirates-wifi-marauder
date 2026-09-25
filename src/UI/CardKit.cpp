@@ -113,82 +113,24 @@ lv_obj_t* cardkit_create_card(lv_obj_t* parent, const CardSpec& spec) {
     return card;
 }
 
-lv_obj_t* cardkit_create_header(lv_obj_t* parent, const char* title, bool isRoot, int batteryPct) {
-    lv_obj_t* band = lv_obj_create(parent);
-    lv_obj_remove_flag(band, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_pos(band, 0, 0);
-    lv_obj_set_size(band, TFT_WIDTH, THEME_HEADER_H);
-    lv_obj_set_style_radius(band, 0, 0);
-    lv_obj_set_style_bg_opa(band, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(band, cardkit_color(THEME_BG), 0);
-    lv_obj_set_style_pad_all(band, 0, 0);
-    lv_obj_set_style_border_side(band, LV_BORDER_SIDE_BOTTOM, 0);
-    lv_obj_set_style_border_width(band, 1, 0);
-    lv_obj_set_style_border_color(band, cardkit_color(THEME_BORDER), 0);
-
-    lv_obj_t* label = lv_label_create(band);
+lv_obj_t* cardkit_create_title(lv_obj_t* parent, const char* title, bool isRoot) {
+    lv_obj_t* label = lv_label_create(parent);
     lv_label_set_text(label, title);
     lv_obj_set_style_text_color(label, cardkit_color(THEME_TEXT), 0);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
-    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 6);
+    lv_obj_update_layout(label);
+    lv_obj_set_pos(label, (TFT_WIDTH - lv_obj_get_width(label)) / 2, 4);
 
     if (isRoot) {
         lv_obj_t* sub = lv_label_create(parent);
         lv_label_set_text(sub, "CC13");
         lv_obj_set_style_text_color(sub, cardkit_color(THEME_TEXT_MUTED), 0);
         lv_obj_set_style_text_font(sub, &lv_font_montserrat_12, 0);
-        lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, THEME_HEADER_H + 2);
+        lv_obj_update_layout(sub);
+        lv_obj_set_pos(sub, (TFT_WIDTH - lv_obj_get_width(sub)) / 2, THEME_TITLE_H);
     }
 
-    // Battery glyph, top-right - same rect math drawBattery() used.
-    int16_t bx = TFT_WIDTH - THEME_BATT_W - THEME_SPACE_SM;
-    int16_t by = (THEME_HEADER_H - THEME_BATT_H) / 2;
-    uint16_t battColor = (batteryPct > 50) ? THEME_OK : (batteryPct > 20) ? THEME_WARN : THEME_ERROR;
-
-    lv_obj_t* shell = lv_obj_create(band);
-    lv_obj_remove_flag(shell, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_pos(shell, bx, by);
-    lv_obj_set_size(shell, THEME_BATT_W, THEME_BATT_H);
-    lv_obj_set_style_radius(shell, 2, 0);
-    lv_obj_set_style_bg_opa(shell, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(shell, 1, 0);
-    lv_obj_set_style_border_color(shell, cardkit_color(THEME_TEXT_MUTED), 0);
-    lv_obj_set_style_pad_all(shell, 2, 0);
-
-    int pct = batteryPct < 0 ? 0 : (batteryPct > 100 ? 100 : batteryPct);
-    int fillW = (THEME_BATT_W - 4) * pct / 100;
-    lv_obj_t* fill = lv_obj_create(shell);
-    lv_obj_remove_flag(fill, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(fill, 0, 0);
-    lv_obj_set_style_border_width(fill, 0, 0);
-    lv_obj_set_style_radius(fill, 1, 0);
-    lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(fill, cardkit_color(battColor), 0);
-    lv_obj_set_pos(fill, 0, 0);
-    lv_obj_set_size(fill, fillW < 1 ? 1 : fillW, THEME_BATT_H - 4);
-
-    return band;
-}
-
-lv_obj_t* cardkit_create_back_button(lv_obj_t* parent, bool pressed) {
-    lv_obj_t* btn = lv_obj_create(parent);
-    lv_obj_remove_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_pos(btn, 2, 2);
-    lv_obj_set_size(btn, THEME_BACK_W - 4, THEME_BACK_H - 4);
-    lv_obj_set_style_radius(btn, THEME_RADIUS_SM, 0);
-    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(btn, cardkit_color(pressed ? THEME_SURFACE_HI : THEME_SURFACE), 0);
-    lv_obj_set_style_border_width(btn, 1, 0);
-    lv_obj_set_style_border_color(btn, cardkit_color(THEME_BORDER), 0);
-    lv_obj_set_style_pad_all(btn, 0, 0);
-
-    lv_obj_t* label = lv_label_create(btn);
-    lv_label_set_text(label, "< Back");
-    lv_obj_set_style_text_color(label, cardkit_color(THEME_TEXT), 0);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
-    lv_obj_center(label);
-
-    return btn;
+    return label;
 }
 
 lv_obj_t* cardkit_create_hint(lv_obj_t* parent, const char* text, int16_t centerX, int16_t y) {
