@@ -7,7 +7,7 @@ that Carla verified 12/12 spec points against, line-by-line, twice — and
 was still unusable on the real badge, because nobody had run it. This is
 the "run it" step.
 
-## Correcting the ticket's own premise
+## Correcting the ticket's own premise (historical - Nexus 0f35e128, 2026-09-24)
 
 The ticket assumed the badge UI is built on LVGL ("LVGL has a first-class
 desktop simulator — compile our own UI layer against it"). It isn't. Grep
@@ -19,6 +19,22 @@ this is a **native TFT_eSPI-compatible fake**: a host build of the real
 rendering into an in-memory framebuffer instead of an SPI panel. Same goal
 (run the UI without hardware), different mechanism, because the premise in
 the ticket description doesn't match the codebase.
+
+**No longer true as of Nexus 84f4e52c (2026-09-25): the badge UI IS on LVGL
+now.** `src/hardware/badge_menu.cpp`'s card/chrome rendering was ported from
+raw TFT_eSPI primitives to LVGL 9.2 widgets (`src/UI/CardKit.cpp`) - real
+anti-aliased type, gradient-filled rounded cards, a real pressed state. LVGL
+is vendored as a submodule at `sim/vendor/lvgl` (pinned to the same v9.2.2
+commit as CC15's QACode_27/sim/vendor/lvgl) and does the actual compositing
+now; `sim/fakes/lv_disp_port_sim.cpp` flushes LVGL's draw buffer into the
+same `Framebuffer` this file's fakes always wrote into, so everything below
+about the framebuffer/PNG capture/touch-scripting machinery is still
+accurate. What changed is only WHAT paints into that framebuffer for
+badge_menu.cpp's screens - the TFT_eSPI fake immediately below is still
+real and still used, just no longer by badge_menu.cpp's own card drawing
+(upstream's own screens, reached via the "repro"/"doublefire" modes below,
+are unaffected and still TFT_eSPI - out of scope for 84f4e52c, see that
+ticket).
 
 ## What's real, what's fake
 
@@ -156,16 +172,20 @@ Real firmware still builds clean after the fix:
 ## Running it
 
 ```
-./sim/build.sh                       # builds sim/out/badge_sim (needs clang++ and zlib; apt install clang zlib1g-dev on Linux)
-./sim/out/badge_sim root sim/out     # 01_root.png, 02_submenu.png
-./sim/out/badge_sim options sim/out  # 03_options.png (LED Brightness grid)
-./sim/out/badge_sim repro sim/out    # the half-2 bug, reproduced headless (pre-fix code path)
+./sim/build.sh                        # builds sim/out/badge_sim - needs clang++, zlib, and the sim/vendor/lvgl
+                                       # submodule checked out (git submodule update --init sim/vendor/lvgl)
+./sim/out/badge_sim root sim/out      # 01_root.png, 02_submenu.png
+./sim/out/badge_sim options sim/out   # 03_options.png (LED Brightness grid)
+./sim/out/badge_sim pressed sim/out   # 04_pressed.png - a card mid-touch-down (Nexus 84f4e52c: "real pressed state")
+./sim/out/badge_sim repro sim/out     # the half-2 bug, reproduced headless (pre-fix code path)
 ./sim/out/badge_sim doublefire sim/out
-./sim/out/badge_sim fixed sim/out    # same scenarios, through the actual fix
+./sim/out/badge_sim fixed sim/out     # same scenarios, through the actual fix
 ```
 
 `root` + `options` together are the ticket's three review screens (root,
-a submenu, an options screen). `options` calls the real, unmodified
+a submenu, an options screen); `pressed` is the fourth, added for Nexus
+84f4e52c's LVGL port to prove the pressed-state treatment renders and isn't
+just a colour swap. `options` calls the real, unmodified
 `ledBrightnessOptionsScreen()` directly rather than replaying the full
 root → "Badge" card → "LED Brightness" card tap sequence: both of those
 navigation steps are blocking input loops (`drawBadgeSubmenu()`, then this
@@ -182,9 +202,12 @@ only the path to reach it differs.
 ## CI
 
 `.github/workflows/sim-screenshots.yml` builds the simulator and renders
-`01_root.png`/`02_submenu.png`/`03_options.png` as a downloadable artifact
-on every push or PR touching the UI layer (`badge_menu.*`, `touch_input.*`,
-`badge_nav.*`, `badge_ui_theme.h`, `sim/**`). It does **not** auto-attach
+`01_root.png`/`02_submenu.png`/`03_options.png`/`04_pressed.png` as a
+downloadable artifact on every push or PR touching the UI layer
+(`badge_menu.*`, `touch_input.*`, `badge_nav.*`, `lv_disp_port.*`, `UI/**`,
+`badge_ui_theme.h`, `lv_conf.h`, `sim/**`). Checks out submodules
+(`sim/vendor/lvgl`, Nexus 84f4e52c) now - it didn't need to before LVGL. It
+does **not** auto-attach
 to the Nexus ticket — that would need a Nexus API token wired into this
 repo's GitHub Actions secrets, which nothing here currently does. Until
 that's set up, the loop is: push → open the Actions run → download the

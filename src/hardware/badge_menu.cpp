@@ -38,6 +38,8 @@
 #include "badge_ui_theme.h"
 #include "touch_input.h"
 #include "badge_nav.h"
+#include "UI/CardKit.h"
+#include "hardware/lv_disp_port.h"
 
 extern MenuFunctions menu_function_obj;
 extern Display display_obj;
@@ -63,43 +65,57 @@ static Menu* s_mainMenu = nullptr;
 static const UiRect kBackRect = {0, 0, THEME_BACK_W, THEME_BACK_H};
 static const uint8_t ZONE_BACK = 250;  // reserved id, screens use 0..N for their own controls
 
-static void drawBattery() {
-  int8_t pct = batteryGetPercent();
-  uint16_t x = TFT_WIDTH - THEME_BATT_W - THEME_SPACE_SM;
-  uint16_t y = (THEME_HEADER_H - THEME_BATT_H) / 2;
-  uint16_t color = (pct > 50) ? THEME_OK : (pct > 20) ? THEME_WARN : THEME_ERROR;
+// ---------------------------------------------------------------------
+// LVGL screen (Nexus 84f4e52c: LVGL port, "better buttons"). One
+// persistent lv_obj_t every screen in this file shares - they're mutually
+// exclusive in time (blocking control flow, one panel), so "clear and
+// rebuild" on every repaint is the same shape the old fillScreen()-based
+// code used, just with LVGL objects (and its own AA font/gradient
+// compositing) doing the drawing instead of raw TFT_eSPI primitives. See
+// UI/CardKit.h for why this is safe to bolt onto the existing
+// TapDetector/encoder control flow below unchanged.
+// ---------------------------------------------------------------------
 
-  display_obj.tft.drawRoundRect(x, y, THEME_BATT_W, THEME_BATT_H, 2, THEME_TEXT_MUTED);
-  display_obj.tft.fillRect(x + THEME_BATT_W, y + 3, 2, THEME_BATT_H - 6, THEME_TEXT_MUTED);
-  uint16_t fillW = (uint16_t)((uint32_t)(THEME_BATT_W - 4) * max((int8_t)0, pct) / 100);
-  display_obj.tft.fillRect(x + 2, y + 2, fillW, THEME_BATT_H - 4, color);
-  if (fillW < (uint16_t)(THEME_BATT_W - 4))
-    display_obj.tft.fillRect(x + 2 + fillW, y + 2, THEME_BATT_W - 4 - fillW, THEME_BATT_H - 4, THEME_BG);
+static lv_obj_t* s_lvScreen = nullptr;
+
+static lv_obj_t* lvScreen() {
+  if (!s_lvScreen) {
+    lvDispInit();
+    s_lvScreen = lv_obj_create(nullptr);
+    lv_obj_remove_flag(s_lvScreen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(s_lvScreen, cardkit_color(THEME_BG), 0);
+    lv_obj_set_style_bg_opa(s_lvScreen, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(s_lvScreen, 0, 0);
+    lv_obj_set_style_border_width(s_lvScreen, 0, 0);
+    lv_scr_load(s_lvScreen);
+  }
+  return s_lvScreen;
 }
 
-static void drawBackButton(bool pressed) {
-  uint16_t fill = pressed ? THEME_SURFACE_HI : THEME_SURFACE;
-  display_obj.tft.fillRoundRect(kBackRect.x + 2, kBackRect.y + 2, kBackRect.w - 4, kBackRect.h - 4, THEME_RADIUS_SM, fill);
-  display_obj.tft.drawRoundRect(kBackRect.x + 2, kBackRect.y + 2, kBackRect.w - 4, kBackRect.h - 4, THEME_RADIUS_SM, THEME_BORDER);
-  display_obj.tft.setTextColor(THEME_TEXT, fill);
-  display_obj.tft.drawCentreString("< Back", kBackRect.x + kBackRect.w / 2, kBackRect.y + 6, THEME_FONT_SM);
+// Clears the screen and rebuilds chrome: header band (title + battery,
+// cardkit_create_header() draws the "CC13" root subtitle itself when
+// isRoot) and the persistent Back control when !isRoot. Callers add their
+// own cards/content after this returns, then call lvRepaintEnd().
+static void lvRepaintBegin(const char* title, bool isRoot, bool backPressed) {
+  lv_obj_t* screen = lvScreen();
+  lv_obj_clean(screen);
+  cardkit_create_header(screen, title, isRoot, batteryGetPercent());
+  if (!isRoot) cardkit_create_back_button(screen, backPressed);
 }
 
-// Draws the header bar (fills its own band, callers draw body below it).
-// isRoot == true omits the Back control (root is the one screen you can't
-// back out of further).
-static void drawChrome(const char* title, bool isRoot) {
-  display_obj.tft.fillRect(0, 0, TFT_WIDTH, THEME_HEADER_H, THEME_BG);
-  display_obj.tft.drawFastHLine(0, THEME_HEADER_H, TFT_WIDTH, THEME_BORDER);
-  display_obj.tft.setTextColor(THEME_TEXT, THEME_BG);
-  display_obj.tft.drawCentreString(title, TFT_WIDTH / 2, 6, THEME_FONT_MD);
-  drawBattery();
-  if (!isRoot) drawBackButton(false);
+// Instant, synchronous flush - THEME_NO_ARTIFICIAL_DELAY still applies,
+// LVGL just owns the compositing now instead of raw pixel pushes.
+static void lvRepaintEnd() {
+  lv_refr_now(nullptr);
 }
 
 // ---------------------------------------------------------------------
-// Card-button primitive: full-width, >=44px tall, rounded, pressed-state
-// on touch-down, spaced enough that a fingertip can't straddle two.
+// Card-button primitive: full-width, >=44px tall, rounded corners actually
+// drawn, gradient-filled, beveled (raised-surface read), a real inset
+// pressed state, and a chevron on rows that navigate deeper. See
+// UI/CardKit.h - this struct is unchanged in shape from the pre-LVGL
+// CardButton so every call site below only needed a `navigable` value
+// added, not a rewrite.
 // ---------------------------------------------------------------------
 
 struct CardButton {
@@ -107,19 +123,12 @@ struct CardButton {
   const char* title;
   const char* subtitle;   // optional, may be nullptr
   bool selected;          // e.g. current option value
+  bool navigable;         // chevron affordance; false for inline toggles/values
 };
 
-static void drawCard(const CardButton& c, bool pressed) {
-  uint16_t fill = pressed ? THEME_SURFACE_HI : THEME_SURFACE;
-  uint16_t border = c.selected ? THEME_ACCENT : THEME_BORDER;
-  display_obj.tft.fillRoundRect(c.rect.x, c.rect.y, c.rect.w, c.rect.h, THEME_RADIUS_MD, fill);
-  display_obj.tft.drawRoundRect(c.rect.x, c.rect.y, c.rect.w, c.rect.h, THEME_RADIUS_MD, border);
-  display_obj.tft.setTextColor(c.selected ? THEME_ACCENT : THEME_TEXT, fill);
-  display_obj.tft.drawString(c.title, c.rect.x + THEME_SPACE_MD, c.rect.y + THEME_SPACE_XS, THEME_FONT_MD);
-  if (c.subtitle) {
-    display_obj.tft.setTextColor(THEME_TEXT_MUTED, fill);
-    display_obj.tft.drawString(c.subtitle, c.rect.x + THEME_SPACE_MD, c.rect.y + THEME_SPACE_XS + 18, THEME_FONT_SM);
-  }
+static lv_obj_t* drawCard(const CardButton& c, bool pressed) {
+  CardSpec spec{c.rect.x, c.rect.y, c.rect.w, c.rect.h, c.title, c.subtitle, c.selected, pressed, c.navigable};
+  return cardkit_create_card(lvScreen(), spec);
 }
 
 // ---------------------------------------------------------------------
@@ -210,16 +219,8 @@ static void adaptedEnsurePageVisible(int maxVisible) {
 }
 
 static void adaptedRender(Menu* menu, bool isRoot, int pressedRow, bool backPressed) {
-  display_obj.tft.fillScreen(THEME_BG);
-
   const char* title = isRoot ? "BADGE PIRATES" : menu->name.c_str();
-  drawChrome(title, isRoot);
-  if (isRoot) {
-    display_obj.tft.setTextColor(THEME_TEXT_MUTED, THEME_BG);
-    display_obj.tft.drawCentreString("CC13", TFT_WIDTH / 2, THEME_HEADER_H + 2, THEME_FONT_SM);
-  } else {
-    drawBackButton(backPressed);
-  }
+  lvRepaintBegin(title, isRoot, backPressed);
 
   int maxVisible = adaptedMaxVisible(isRoot);
   adaptedEnsurePageVisible(maxVisible);
@@ -229,19 +230,23 @@ static void adaptedRender(Menu* menu, bool isRoot, int pressedRow, bool backPres
     int bodyIdx = s_pageStart + row;
     MenuNode node = menu->list->get(s_bodyRaw[bodyIdx]);
     UiRect r = adaptedRowRect(row, isRoot);
-    CardButton c{r, node.name.c_str(), nullptr, bodyIdx == s_selRow};
+    // navigable=true: every row here is an upstream Menu/MenuNode this
+    // adapter reaches via changeMenu()/callable() - always "goes
+    // somewhere else", never a static label (Nexus 84f4e52c's chevron
+    // requirement).
+    CardButton c{r, node.name.c_str(), nullptr, bodyIdx == s_selRow, true};
     drawCard(c, pressedRow == bodyIdx);
   }
 
   if (s_bodyCount == 0) {
-    display_obj.tft.setTextColor(THEME_TEXT_MUTED, THEME_BG);
-    display_obj.tft.drawCentreString("Nothing here yet", TFT_WIDTH / 2, adaptedRowRect(0, isRoot).y + 10, THEME_FONT_SM);
+    cardkit_create_hint(lvScreen(), "Nothing here yet", TFT_WIDTH / 2, adaptedRowRect(0, isRoot).y + 10);
   } else if (s_bodyCount > maxVisible) {
     char buf[20];
     snprintf(buf, sizeof(buf), "%d-%d of %d", s_pageStart + 1, s_pageStart + shown, s_bodyCount);
-    display_obj.tft.setTextColor(THEME_TEXT_MUTED, THEME_BG);
-    display_obj.tft.drawCentreString(buf, TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_MD - 8, THEME_FONT_SM);
+    cardkit_create_hint(lvScreen(), buf, TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_MD - 8);
   }
+
+  lvRepaintEnd();
 }
 
 // Fires whenever the currently-selected node's action should run - tap
@@ -389,29 +394,31 @@ static void drawBadgeSubmenu() {
 #endif
 
   auto render = [&](int pressedZone) {
-    display_obj.tft.fillScreen(THEME_BG);
-    drawChrome("Badge", /*isRoot=*/false);
+    lvRepaintBegin("Badge", /*isRoot=*/false, pressedZone == ZONE_BACK);
     uint16_t y = THEME_HEADER_H + THEME_SPACE_MD;
     uint16_t rowH = THEME_CARD_MIN_H;
     uint16_t x = THEME_SPACE_MD;
     uint16_t w = TFT_WIDTH - THEME_SPACE_MD * 2;
 
-    CardButton led{{x, y, w, rowH}, "LED Brightness", "Tap to adjust", false};
+    CardButton led{{x, y, w, rowH}, "LED Brightness", "Tap to adjust", false, true};
     drawCard(led, pressedZone == Z_LED);
     y += rowH + THEME_SPACE_SM;
 
-    CardButton buzz{{x, y, w, rowH}, "Buzzer", buzzerIsMuted() ? "Muted" : "On", false};
+    // Buzzer toggles in place (no navigation), so no chevron - visually
+    // distinct from the rows next to it that do go somewhere else.
+    CardButton buzz{{x, y, w, rowH}, "Buzzer", buzzerIsMuted() ? "Muted" : "On", false, false};
     drawCard(buzz, pressedZone == Z_BUZZ);
     y += rowH + THEME_SPACE_SM;
 
-    CardButton batt{{x, y, w, rowH}, "Battery Status", nullptr, false};
+    CardButton batt{{x, y, w, rowH}, "Battery Status", nullptr, false, true};
     drawCard(batt, pressedZone == Z_BATT);
     y += rowH + THEME_SPACE_SM;
 
 #ifndef PRODUCTION_BUILD
-    CardButton hw{{x, y, w, rowH}, "Hardware Test", nullptr, false};
+    CardButton hw{{x, y, w, rowH}, "Hardware Test", nullptr, false, true};
     drawCard(hw, pressedZone == Z_HWTEST);
 #endif
+    lvRepaintEnd();
   };
 
   render(0);
@@ -438,8 +445,7 @@ static void drawBadgeSubmenu() {
     int pressedNow = 0;
     for (int i = 0; i < n; i++) if (tap.isPressed(zones[i].id)) pressedNow = zones[i].id;
     if (pressedNow != lastPressed) {
-      if (pressedNow == ZONE_BACK || lastPressed == ZONE_BACK) drawBackButton(pressedNow == ZONE_BACK);
-      else render(pressedNow);
+      render(pressedNow);
       lastPressed = pressedNow;
     }
 
@@ -486,30 +492,35 @@ static void ledBrightnessOptionsScreen() {
             (int16_t)cellW, (int16_t)cellH};
   };
 
-  auto render = [&](int pressedIdx) {
-    display_obj.tft.fillScreen(THEME_BG);
-    drawChrome("LED Brightness", /*isRoot=*/false);
+  auto render = [&](int pressedIdx, bool backPressed) {
+    lvRepaintBegin("LED Brightness", /*isRoot=*/false, backPressed);
     for (uint8_t i = 0; i < numLevels; i++) {
       UiRect r = cellRect(i);
-      uint16_t fill = (pressedIdx == i) ? THEME_SURFACE_HI : THEME_SURFACE;
-      uint16_t border = (i == idx) ? THEME_ACCENT : THEME_BORDER;
-      display_obj.tft.fillRoundRect(r.x, r.y, r.w, r.h, THEME_RADIUS_SM, fill);
-      display_obj.tft.drawRoundRect(r.x, r.y, r.w, r.h, THEME_RADIUS_SM, border);
-      display_obj.tft.setTextColor((i == idx) ? THEME_ACCENT : THEME_TEXT, fill);
       char buf[6];
       snprintf(buf, sizeof(buf), "%d%%", levels[i] * 100 / 255);
-      display_obj.tft.drawCentreString(buf, r.x + r.w / 2, r.y + (r.h - 8) / 2, THEME_FONT_SM);
+      // title=nullptr: these are small square option cells, not full-width
+      // rows - the caller (here) centers its own label instead of
+      // CardKit's default left-aligned title. No chevron: tapping a cell
+      // selects a value in place, it doesn't navigate anywhere.
+      CardButton c{r, nullptr, nullptr, (i == idx), false};
+      lv_obj_t* cell = drawCard(c, pressedIdx == i);
+      lv_obj_t* lbl = lv_label_create(cell);
+      lv_label_set_text(lbl, buf);
+      lv_obj_set_style_text_color(lbl, cardkit_color((i == idx) ? THEME_ACCENT : THEME_TEXT), 0);
+      lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
+      lv_obj_center(lbl);
     }
-    display_obj.tft.setTextColor(THEME_TEXT_MUTED, THEME_BG);
-    display_obj.tft.drawCentreString("Tap a level to apply", TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_LG, THEME_FONT_SM);
+    cardkit_create_hint(lvScreen(), "Tap a level to apply", TFT_WIDTH / 2, TFT_HEIGHT - THEME_SPACE_LG);
+    lvRepaintEnd();
   };
 
-  render(-1);
+  render(-1, false);
   led_feedback_set_brightness(levels[idx]);
   SIM_FRAME("led_brightness");
 
   TapDetector tap;
   int lastPressed = -1;
+  bool lastBackPressed = false;
   while (true) {
     TouchZone zones[9];
     zones[0] = {kBackRect, ZONE_BACK};
@@ -520,20 +531,21 @@ static void ledBrightnessOptionsScreen() {
     for (uint8_t i = 0; i < numLevels; i++) if (tap.isPressed(i)) pressedNow = i;
     bool backPressed = tap.isPressed(ZONE_BACK);
 
-    if (backPressed != (lastPressed == ZONE_BACK)) drawBackButton(backPressed);
-    if (pressedNow != lastPressed && pressedNow != -1) { render(pressedNow); lastPressed = pressedNow; }
-    else if (pressedNow == -1 && lastPressed != -1 && lastPressed != ZONE_BACK) { lastPressed = -1; }
-    if (backPressed) lastPressed = ZONE_BACK;
+    if (pressedNow != lastPressed || backPressed != lastBackPressed) {
+      render(pressedNow, backPressed);
+      lastPressed = pressedNow;
+      lastBackPressed = backPressed;
+    }
 
     if (fired == ZONE_BACK) break;
     if (fired >= 0 && fired < numLevels) {
       idx = fired;
       led_feedback_set_brightness(levels[idx]);
-      render(-1);
+      render(-1, false);
     }
 
-    if (encoder_turned_up() && idx > 0) { idx--; led_feedback_set_brightness(levels[idx]); render(-1); }
-    if (encoder_turned_down() && idx < numLevels - 1) { idx++; led_feedback_set_brightness(levels[idx]); render(-1); }
+    if (encoder_turned_up() && idx > 0) { idx--; led_feedback_set_brightness(levels[idx]); render(-1, false); }
+    if (encoder_turned_down() && idx < numLevels - 1) { idx++; led_feedback_set_brightness(levels[idx]); render(-1, false); }
     if (encoder_button_pressed()) break;
 
     delay(30);

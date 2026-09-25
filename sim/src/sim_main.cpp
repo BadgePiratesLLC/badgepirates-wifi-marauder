@@ -246,6 +246,30 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  if (mode == "pressed") {
+    // Nexus 84f4e52c: capture a card mid-press, between touch-down and
+    // touch-up, to prove the "real pressed state" requirement (deeper
+    // fill, no top highlight - not just a colour swap) actually renders,
+    // not just that the code path exists. Bluetooth (row 1, y~130 - see
+    // the "doublefire" mode's own comment for this exact math) rather than
+    // WiFi/row 0: row 0 is also the initially-selected row, whose accent
+    // border would otherwise be the only visible difference in this shot.
+    //
+    // Uses fixedTick()/fixedTap()'s gated path (badgeMenuOwnsScreen()
+    // decides which of {upstream, our adapter} touches the screen this
+    // tick), same as main.cpp's real loop() - NOT tickUpstreamOnly()+
+    // tickAdapterOnly() unconditionally, which is "repro"/"doublefire"
+    // mode's deliberately-pre-fix pattern and fires upstream's own
+    // touch handling too.
+    fixedTick();
+    sim_set_touch(true, 120, 130);
+    fixedTick();
+    shot(outdir + "/04_pressed.png");
+    sim_set_touch(false, 120, 130);
+    fixedTick();
+    return 0;
+  }
+
   if (mode == "options") {
     // The third review screen the ticket wants (root / submenu / options):
     // LED Brightness, the options-as-buttons grid from half 1. Reached on

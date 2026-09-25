@@ -1,3 +1,6 @@
 [submodule "esp32marauder-upstream"]
 	path = esp32marauder-upstream
 	url = https://github.com/justcallmekoko/ESP32Marauder.git
+[submodule "sim/vendor/lvgl"]
+	path = sim/vendor/lvgl
+	url = https://github.com/lvgl/lvgl.git

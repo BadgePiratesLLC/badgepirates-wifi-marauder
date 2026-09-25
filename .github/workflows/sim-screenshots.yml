@@ -11,14 +11,22 @@ on:
       - "src/hardware/badge_menu.*"
       - "src/hardware/touch_input.*"
       - "src/hardware/badge_nav.*"
+      - "src/hardware/lv_disp_port.*"
+      - "src/UI/**"
+      - "include/UI/**"
       - "include/badge_ui_theme.h"
+      - "include/lv_conf.h"
       - "sim/**"
   pull_request:
     paths:
       - "src/hardware/badge_menu.*"
       - "src/hardware/touch_input.*"
       - "src/hardware/badge_nav.*"
+      - "src/hardware/lv_disp_port.*"
+      - "src/UI/**"
+      - "include/UI/**"
       - "include/badge_ui_theme.h"
+      - "include/lv_conf.h"
       - "sim/**"
   workflow_dispatch: {}
 
@@ -28,7 +36,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: false # sim build never touches esp32marauder-upstream, see sim/README.md
+          # esp32marauder-upstream is ALSO a direct submodule of this repo
+          # and the sim build never touches it (see sim/README.md) - so
+          # this stays false (not recursive/true, which would fetch both)
+          # and sim/vendor/lvgl gets its own targeted init below instead.
+          submodules: false
+
+      - name: Init LVGL submodule (Nexus 84f4e52c)
+        run: git submodule update --init sim/vendor/lvgl
 
       - name: Install build deps
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
@@ -36,10 +51,11 @@ jobs:
       - name: Build simulator
         run: ./sim/build.sh
 
-      - name: Render the three review screens
+      - name: Render the four review screens
         run: |
           ./sim/out/badge_sim root sim/out      # 01_root.png, 02_submenu.png
           ./sim/out/badge_sim options sim/out    # 03_options.png
+          ./sim/out/badge_sim pressed sim/out    # 04_pressed.png
 
       - uses: actions/upload-artifact@v4
         with:
@@ -48,4 +64,5 @@ jobs:
             sim/out/01_root.png
             sim/out/02_submenu.png
             sim/out/03_options.png
+            sim/out/04_pressed.png
           retention-days: 90
