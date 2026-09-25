@@ -32,12 +32,16 @@ inline void pinMode(int, int) {}
 #define F(x) x
 #define PROGMEM
 
-#ifndef min
-#define min(a,b) ((a)<(b)?(a):(b))
-#endif
-#ifndef max
-#define max(a,b) ((a)>(b)?(a):(b))
-#endif
+// Templates, not macros: a macro named min/max poisons every later standard
+// header that declares its own min()/max() (e.g. libstdc++'s <limits>,
+// pulled in transitively by <cmath> from TFT_eSPI.h) by text-substituting
+// inside their declarations. Worked by luck on macOS/libc++, hard-failed on
+// Linux/libstdc++ in CI - see Nexus 0f35e128. Arduino's own newer cores
+// make the same fix for the same reason.
+template <typename A, typename B>
+inline auto min(A a, B b) -> decltype(a < b ? a : b) { return a < b ? a : b; }
+template <typename A, typename B>
+inline auto max(A a, B b) -> decltype(a > b ? a : b) { return a > b ? a : b; }
 
 // ---- Arduino String, minimal subset (construct from const char*/int,
 // c_str(), equals(), length(), toCharArray(), operator+, operator==). ----
