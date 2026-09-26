@@ -63,7 +63,7 @@ jobs:
       - name: Render the status bar scenarios (Nexus c39cd3b3)
         run: ./sim/out/badge_sim statusbar sim/out   # 10-16_statusbar_*.png
 
-      - name: Render Candidate B - FlatOutline (Nexus 84f4e52c deliverable: 2 treatments, not 1)
+      - name: "Render Candidate B - FlatOutline (Nexus 84f4e52c deliverable: 2 treatments, not 1)"
         run: |
           ./sim/out/badge_sim treatmentB sim/out         # treatmentB_01_root.png, treatmentB_02_submenu.png
           ./sim/out/badge_sim treatmentBPressed sim/out  # treatmentB_04_pressed.png
