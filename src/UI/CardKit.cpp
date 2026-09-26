@@ -13,52 +13,103 @@ lv_color_t cardkit_color(uint16_t rgb565) {
 static lv_style_t s_style_card;
 static lv_style_t s_style_card_pressed;
 static bool s_styles_ready = false;
+static CardKitTreatment s_treatment = CardKitTreatment::RaisedGradient;
+static CardKitTreatment s_styles_built_for = CardKitTreatment::RaisedGradient;
+
+void cardkit_set_treatment(CardKitTreatment t) {
+    s_treatment = t;
+}
 
 static void ensure_styles() {
-    if (s_styles_ready) return;
+    // Rebuild whenever the selected treatment changes, not just once -
+    // sim/'s "treatmentB" mode flips this mid-process to render both
+    // candidates from the one binary.
+    if (s_styles_ready && s_styles_built_for == s_treatment) return;
     s_styles_ready = true;
+    s_styles_built_for = s_treatment;
 
     lv_style_init(&s_style_card);
-    lv_style_set_radius(&s_style_card, THEME_RADIUS_MD);
-    lv_style_set_bg_opa(&s_style_card, LV_OPA_COVER);
-    lv_style_set_bg_color(&s_style_card, cardkit_color(THEME_SURFACE_GRAD_TOP));
-    lv_style_set_bg_grad_color(&s_style_card, cardkit_color(THEME_SURFACE_GRAD_BOTTOM));
-    lv_style_set_bg_grad_dir(&s_style_card, LV_GRAD_DIR_VER);
-    lv_style_set_border_width(&s_style_card, 1);
-    lv_style_set_border_color(&s_style_card, cardkit_color(THEME_BORDER));
-    lv_style_set_border_opa(&s_style_card, LV_OPA_COVER);
-    lv_style_set_pad_all(&s_style_card, 0);
-    lv_style_set_shadow_width(&s_style_card, 0);
-
     lv_style_init(&s_style_card_pressed);
-    lv_style_set_radius(&s_style_card_pressed, THEME_RADIUS_MD);
-    lv_style_set_bg_opa(&s_style_card_pressed, LV_OPA_COVER);
-    // Flat, near-black fill - deliberately NOT THEME_SURFACE_HI (that
-    // token is *lighter* than THEME_SURFACE, a "highlight" tone, the
-    // wrong direction for "deepen the fill"; it's still used for the tiny
-    // Back control's tap flash, just not here). A flat dark fill with no
-    // gradient reads as "pushed in", not a colour swap - "inset the
-    // highlight, deepen the fill" from Nexus 84f4e52c.
-    lv_style_set_bg_color(&s_style_card_pressed, cardkit_color(THEME_SURFACE_EDGE_LO));
-    lv_style_set_bg_grad_dir(&s_style_card_pressed, LV_GRAD_DIR_NONE);
-    lv_style_set_border_width(&s_style_card_pressed, 1);
-    lv_style_set_border_color(&s_style_card_pressed, cardkit_color(THEME_SURFACE_EDGE_LO));
-    lv_style_set_border_opa(&s_style_card_pressed, LV_OPA_COVER);
-    lv_style_set_pad_all(&s_style_card_pressed, 0);
-    lv_style_set_shadow_width(&s_style_card_pressed, 0);
+
+    if (s_treatment == CardKitTreatment::RaisedGradient) {
+        lv_style_set_radius(&s_style_card, THEME_RADIUS_MD);
+        lv_style_set_bg_opa(&s_style_card, LV_OPA_COVER);
+        lv_style_set_bg_color(&s_style_card, cardkit_color(THEME_SURFACE_GRAD_TOP));
+        lv_style_set_bg_grad_color(&s_style_card, cardkit_color(THEME_SURFACE_GRAD_BOTTOM));
+        lv_style_set_bg_grad_dir(&s_style_card, LV_GRAD_DIR_VER);
+        lv_style_set_border_width(&s_style_card, 1);
+        lv_style_set_border_color(&s_style_card, cardkit_color(THEME_BORDER));
+        lv_style_set_border_opa(&s_style_card, LV_OPA_COVER);
+        lv_style_set_pad_all(&s_style_card, 0);
+        lv_style_set_shadow_width(&s_style_card, 0);
+
+        lv_style_set_radius(&s_style_card_pressed, THEME_RADIUS_MD);
+        lv_style_set_bg_opa(&s_style_card_pressed, LV_OPA_COVER);
+        // Flat, near-black fill - deliberately NOT THEME_SURFACE_HI (that
+        // token is *lighter* than THEME_SURFACE, a "highlight" tone, the
+        // wrong direction for "deepen the fill"; it's still used for the tiny
+        // Back control's tap flash, just not here). A flat dark fill with no
+        // gradient reads as "pushed in", not a colour swap - "inset the
+        // highlight, deepen the fill" from Nexus 84f4e52c.
+        lv_style_set_bg_color(&s_style_card_pressed, cardkit_color(THEME_SURFACE_EDGE_LO));
+        lv_style_set_bg_grad_dir(&s_style_card_pressed, LV_GRAD_DIR_NONE);
+        lv_style_set_border_width(&s_style_card_pressed, 1);
+        lv_style_set_border_color(&s_style_card_pressed, cardkit_color(THEME_SURFACE_EDGE_LO));
+        lv_style_set_border_opa(&s_style_card_pressed, LV_OPA_COVER);
+        lv_style_set_pad_all(&s_style_card_pressed, 0);
+        lv_style_set_shadow_width(&s_style_card_pressed, 0);
+    } else {
+        // Candidate B, FlatOutline: no gradient, no bevel - a single flat
+        // THEME_SURFACE fill with the border always on (not select-only),
+        // tighter radius so it reads as a distinct, cooler-tempered chrome
+        // language rather than a recolour of Candidate A. "Real pressed
+        // state" is still satisfied (THEME_SURFACE_EDGE_LO deepen, same
+        // token as Candidate A) - only the resting-state language differs.
+        lv_style_set_radius(&s_style_card, THEME_RADIUS_SM);
+        lv_style_set_bg_opa(&s_style_card, LV_OPA_COVER);
+        lv_style_set_bg_color(&s_style_card, cardkit_color(THEME_SURFACE));
+        lv_style_set_bg_grad_dir(&s_style_card, LV_GRAD_DIR_NONE);
+        lv_style_set_border_width(&s_style_card, 1);
+        lv_style_set_border_color(&s_style_card, cardkit_color(THEME_BORDER));
+        lv_style_set_border_opa(&s_style_card, LV_OPA_COVER);
+        lv_style_set_pad_all(&s_style_card, 0);
+        lv_style_set_shadow_width(&s_style_card, 0);
+
+        lv_style_set_radius(&s_style_card_pressed, THEME_RADIUS_SM);
+        lv_style_set_bg_opa(&s_style_card_pressed, LV_OPA_COVER);
+        lv_style_set_bg_color(&s_style_card_pressed, cardkit_color(THEME_SURFACE_EDGE_LO));
+        lv_style_set_bg_grad_dir(&s_style_card_pressed, LV_GRAD_DIR_NONE);
+        lv_style_set_border_width(&s_style_card_pressed, 1);
+        lv_style_set_border_color(&s_style_card_pressed, cardkit_color(THEME_SURFACE_EDGE_LO));
+        lv_style_set_border_opa(&s_style_card_pressed, LV_OPA_COVER);
+        lv_style_set_pad_all(&s_style_card_pressed, 0);
+        lv_style_set_shadow_width(&s_style_card_pressed, 0);
+    }
+}
+
+static lv_obj_t* create_rect(lv_obj_t* parent, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t colorToken) {
+    lv_obj_t* r = lv_obj_create(parent);
+    lv_obj_remove_flag(r, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(r, 0, 0);
+    lv_obj_set_style_border_width(r, 0, 0);
+    lv_obj_set_style_radius(r, 0, 0);
+    lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(r, cardkit_color(colorToken), 0);
+    lv_obj_set_pos(r, x, y);
+    lv_obj_set_size(r, w, h);
+    return r;
 }
 
 static lv_obj_t* create_hairline(lv_obj_t* parent, int16_t x, int16_t y, int16_t w, uint16_t colorToken) {
-    lv_obj_t* line = lv_obj_create(parent);
-    lv_obj_remove_flag(line, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(line, 0, 0);
-    lv_obj_set_style_border_width(line, 0, 0);
-    lv_obj_set_style_radius(line, 0, 0);
-    lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(line, cardkit_color(colorToken), 0);
-    lv_obj_set_pos(line, x, y);
-    lv_obj_set_size(line, w, 1);
-    return line;
+    return create_rect(parent, x, y, w, 1, colorToken);
+}
+
+// Candidate B (FlatOutline)'s selected-row affordance: a left accent bar
+// instead of Candidate A's full accent border - inset top/bottom by the
+// card's own radius so it doesn't poke past the rounded corner.
+static constexpr int16_t kFlatOutlineBarW = 3;
+static lv_obj_t* create_vbar(lv_obj_t* parent, int16_t h, uint16_t colorToken) {
+    return create_rect(parent, 0, THEME_RADIUS_SM, kFlatOutlineBarW, h - THEME_RADIUS_SM * 2, colorToken);
 }
 
 lv_obj_t* cardkit_create_card(lv_obj_t* parent, const CardSpec& spec) {
@@ -70,17 +121,27 @@ lv_obj_t* cardkit_create_card(lv_obj_t* parent, const CardSpec& spec) {
     lv_obj_set_size(card, spec.w, spec.h);
     lv_obj_add_style(card, spec.pressed ? &s_style_card_pressed : &s_style_card, 0);
 
-    if (spec.selected) {
-        lv_obj_set_style_border_color(card, cardkit_color(THEME_ACCENT), 0);
-        lv_obj_set_style_border_width(card, 2, 0);
-    }
+    if (s_treatment == CardKitTreatment::RaisedGradient) {
+        if (spec.selected) {
+            lv_obj_set_style_border_color(card, cardkit_color(THEME_ACCENT), 0);
+            lv_obj_set_style_border_width(card, 2, 0);
+        }
 
-    // 1px top highlight / bottom shade - "raised surface, not a
-    // rectangle". Skipped on the pressed state; its own darker fill+border
-    // already reads as inset, a highlight there would fight it.
-    if (!spec.pressed) {
-        create_hairline(card, THEME_RADIUS_MD, 1, spec.w - THEME_RADIUS_MD * 2, THEME_SURFACE_EDGE_HI);
-        create_hairline(card, THEME_RADIUS_MD, spec.h - 2, spec.w - THEME_RADIUS_MD * 2, THEME_SURFACE_EDGE_LO);
+        // 1px top highlight / bottom shade - "raised surface, not a
+        // rectangle". Skipped on the pressed state; its own darker fill+border
+        // already reads as inset, a highlight there would fight it.
+        if (!spec.pressed) {
+            create_hairline(card, THEME_RADIUS_MD, 1, spec.w - THEME_RADIUS_MD * 2, THEME_SURFACE_EDGE_HI);
+            create_hairline(card, THEME_RADIUS_MD, spec.h - 2, spec.w - THEME_RADIUS_MD * 2, THEME_SURFACE_EDGE_LO);
+        }
+    } else {
+        // FlatOutline: selection reads as a left accent bar, not a border
+        // colour swap - kept off the pressed state for the same reason
+        // Candidate A skips its bevel there (the deepened fill already
+        // reads as inset; a bright bar would fight it).
+        if (spec.selected && !spec.pressed) {
+            create_vbar(card, spec.h, THEME_ACCENT);
+        }
     }
 
     // spec.title == nullptr: caller (e.g. the LED-brightness options grid)

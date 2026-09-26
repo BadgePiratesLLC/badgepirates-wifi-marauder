@@ -45,6 +45,23 @@ struct CardSpec {
     bool navigable;         // draw the trailing chevron
 };
 
+// Nexus 84f4e52c deliverable: "render 2 button/card treatments... he picks
+// from rendered candidates, then you build the chosen one." Candidate A
+// (RaisedGradient) is what actually shipped/flashed while that choice was
+// still outstanding - a process gap Nivek caught, not something to hide.
+// Candidate B (FlatOutline) exists so Kevin gets the real side-by-side the
+// ticket asked for; the sim's "treatmentB" mode (sim/src/sim_main.cpp)
+// renders it, real firmware never calls cardkit_set_treatment() so this
+// changes zero on-hardware behavior for the build that's already flashed.
+enum class CardKitTreatment {
+    RaisedGradient = 0,  // shipped: 2-stop vertical gradient, 1px top/bottom bevel, full accent border on select
+    FlatOutline = 1,     // candidate B: flat single-shade fill, thin border always on, left accent bar on select
+};
+
+// Selects which treatment cardkit_create_card() draws. Default
+// RaisedGradient (the shipped/flashed look) so calling this is opt-in.
+void cardkit_set_treatment(CardKitTreatment t);
+
 // Builds one card under `parent`. Parent owns the returned lv_obj_t;
 // callers repaint by lv_obj_clean(parent) + rebuild, the same
 // "clear and rebuild" shape badge_menu.cpp already used for raw tft draws.

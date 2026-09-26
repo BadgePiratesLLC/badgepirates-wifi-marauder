@@ -26,6 +26,7 @@
 #include "Framebuffer.h"
 #include "png_writer.h"
 #include "badge_ui_theme.h"
+#include "UI/CardKit.h"
 
 // ---- globals the fakes declare extern ----
 Framebuffer gFb;
@@ -274,6 +275,47 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  if (mode == "treatmentB") {
+    // Nexus 84f4e52c deliverable, satisfied late: "render 2 button/card
+    // treatments... he picks from rendered candidates, then you build the
+    // chosen one." Candidate A (RaisedGradient) already shipped/flashed
+    // before that choice was made - this mode renders Candidate B
+    // (FlatOutline) through the exact same root+submenu sequence as "root"
+    // above, so the two candidates are a fair side-by-side of the same
+    // screen, not different content. One RunSetup() per process, same as
+    // every other mode here - see "treatmentBPressed" for why the pressed
+    // shot is a separate mode instead of tacked on here.
+    cardkit_set_treatment(CardKitTreatment::FlatOutline);
+
+    tickAdapterOnly();
+    shot(outdir + "/treatmentB_01_root.png");
+
+    tap(120, 116);  // WiFi card, same coordinates as "root" mode
+    shot(outdir + "/treatmentB_02_submenu.png");
+    return 0;
+  }
+
+  if (mode == "treatmentBPressed") {
+    // Candidate B's version of "pressed" mode above. Deliberately its own
+    // process invocation, not folded into "treatmentB" - MenuFunctions'
+    // RunSetup() (sim/fakes/MenuFunctions.cpp) appends to its lists rather
+    // than resetting them, so a second in-process RunSetup() call (needed
+    // to get back to a clean root after "treatmentB" already navigated into
+    // WiFi) silently doubles every menu, which showed up as a wrong "1-2 of
+    // 10" pager instead of "1-2 of 5" - a harness artifact, not a real
+    // design difference, and not something to ship in a screenshot Kevin is
+    // picking a look from.
+    cardkit_set_treatment(CardKitTreatment::FlatOutline);
+
+    fixedTick();
+    sim_set_touch(true, 120, 168);  // Bluetooth, same coordinates as "pressed" mode
+    fixedTick();
+    shot(outdir + "/treatmentB_04_pressed.png");
+    sim_set_touch(false, 120, 168);
+    fixedTick();
+    return 0;
+  }
+
   if (mode == "options") {
     // The third review screen the ticket wants (root / submenu / options):
     // LED Brightness, the options-as-buttons grid from half 1. Reached on
@@ -358,6 +400,6 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  std::fprintf(stderr, "usage: %s [root|repro|doublefire|fixed|options|splash|statusbar] [outdir]\n", argv[0]);
+  std::fprintf(stderr, "usage: %s [root|repro|doublefire|fixed|options|splash|statusbar|treatmentB|treatmentBPressed] [outdir]\n", argv[0]);
   return 1;
 }

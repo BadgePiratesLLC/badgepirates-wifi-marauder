@@ -63,6 +63,11 @@ jobs:
       - name: Render the status bar scenarios (Nexus c39cd3b3)
         run: ./sim/out/badge_sim statusbar sim/out   # 10-16_statusbar_*.png
 
+      - name: Render Candidate B - FlatOutline (Nexus 84f4e52c deliverable: 2 treatments, not 1)
+        run: |
+          ./sim/out/badge_sim treatmentB sim/out         # treatmentB_01_root.png, treatmentB_02_submenu.png
+          ./sim/out/badge_sim treatmentBPressed sim/out  # treatmentB_04_pressed.png
+
       - uses: actions/upload-artifact@v4
         with:
           name: badge-ui-screenshots
@@ -78,4 +83,7 @@ jobs:
             sim/out/14_statusbar_submenu.png
             sim/out/15_statusbar_battery_screen.png
             sim/out/16_statusbar_buzzer_toggle.png
+            sim/out/treatmentB_01_root.png
+            sim/out/treatmentB_02_submenu.png
+            sim/out/treatmentB_04_pressed.png
           retention-days: 90
