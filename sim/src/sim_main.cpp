@@ -251,6 +251,44 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  if (mode == "back") {
+    // Nexus 0e69352a: Kevin's real-hardware complaint is Back-specific
+    // ("often not pushable or not even visible"), and the existing
+    // repro/doublefire/fixed modes above only ever script taps on WiFi/
+    // Bluetooth cards - never the Back control itself. This mode closes
+    // that gap for the one input path the sim CAN exercise: the shared
+    // zone-hit-test + adaptedGoBack()/adaptedResyncNow() logic in
+    // badge_menu.cpp, run through fixedTap() (main.cpp's real gating),
+    // same as "fixed" mode above.
+    //
+    // What this does NOT prove (see sim/README.md's coverage list and the
+    // comment on touch_input.cpp's BADGE_HW_CC13 branch): sim/build.sh
+    // never defines BADGE_HW_CC13, so touchRead() here always takes the
+    // generic `display_obj.updateTouch()` path, never CC13's real direct
+    // FT6336U read + coordinate map(). If the shared logic below is clean
+    // but Back still fails on real CC13 hardware, the bug lives in that
+    // untested CC13-only coordinate mapping, not here - a real hardware
+    // pass (with the new Serial "[Touch] down (x,y) zone=N" log added
+    // alongside this mode) is the only way to tell, not another sim run.
+    fixedTick();
+    shot(outdir + "/back_00_root.png");
+
+    fixedTap(120, 116);  // into WiFi submenu, same coordinates as "fixed" mode
+    shot(outdir + "/back_01_wifi_submenu.png");
+    std::printf("[back] menu open after WiFi tap: %s (expect WiFi)\n",
+                menu_function_obj.current_menu->name.c_str());
+
+    int before = menu_function_obj.changeMenuCallCount;
+    fixedTap(24, 22);  // Back control: kBackRect = {0,0,THEME_BACK_W,THEME_BACK_H}
+    shot(outdir + "/back_02_after_back_tap.png");
+    std::printf("[back] changeMenu() calls for the Back tap: %d (expect 1)\n",
+                menu_function_obj.changeMenuCallCount - before);
+    std::printf("[back] menu open after Back tap: %s (expect %s)\n",
+                menu_function_obj.current_menu->name.c_str(),
+                menu_function_obj.current_menu->parentMenu == nullptr ? "root/mainMenu" : "not-root(FAIL)");
+    return 0;
+  }
+
   if (mode == "pressed") {
     // Nexus 84f4e52c: capture a card mid-press, between touch-down and
     // touch-up, to prove the "real pressed state" requirement (deeper
@@ -400,6 +438,6 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  std::fprintf(stderr, "usage: %s [root|repro|doublefire|fixed|options|splash|statusbar|treatmentB|treatmentBPressed] [outdir]\n", argv[0]);
+  std::fprintf(stderr, "usage: %s [root|repro|doublefire|fixed|back|options|splash|statusbar|treatmentB|treatmentBPressed] [outdir]\n", argv[0]);
   return 1;
 }

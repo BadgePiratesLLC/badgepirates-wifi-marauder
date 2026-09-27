@@ -58,6 +58,16 @@ int TapDetector::poll(const TouchZone* zones, size_t count) {
         break;
       }
     }
+    // Nexus 0e69352a: Kevin reports the Back control (corner-anchored,
+    // smallest hit target on screen) is "often not pushable or not even
+    // visible" on real CC13 hardware, while the sim (which never compiles
+    // BADGE_HW_CC13 - see sim/build.sh, sim/README.md's coverage list) shows
+    // the shared zone-hit logic working correctly for every control it CAN
+    // exercise. One touch-down per physical tap, so this can't flood the
+    // log - print the mapped coordinate and whichever zone (if any) it
+    // landed in, so the next real-hardware pass gets a number instead of a
+    // guess about where CC13's FT6336U mapping is actually placing taps.
+    Serial.printf("[Touch] down (%u,%u) zone=%d\n", x, y, _downId);
     return -1;
   }
 
