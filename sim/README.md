@@ -235,6 +235,95 @@ still zero badges and zero workbenches.
    separate follow-up ticket rather than bundling into this one, so it
    doesn't block the fix below from shipping.
 
+## Interactive web build (Nexus 7b1f65b2) — click through it in a browser
+
+Everything above is headless: it writes PNGs, and reaching it needs a
+checkout and a terminal. Nexus 7b1f65b2 adds a second target that compiles
+the exact same `badge_menu.cpp`/`touch_input.cpp`/`badge_nav.cpp`/
+`UI/CardKit.cpp`/LVGL 9.2 stack to WebAssembly instead of a native binary,
+and drives it with real mouse/touch input on an HTML canvas instead of a
+scripted tap list — so Kevin can open a URL and click cards and Back
+himself, no badge, no checkout, no terminal.
+
+**Live:** <https://firmware.badgepirates.com/badge-sim/> (WebServer02,
+`/var/www/firmware/app/badge-sim/` — same host/nginx vhost that already
+serves `firmware.badgepirates.com`'s flasher page, see
+`reference_firmware_flasher_deploy.md`; no new subdomain, no new nginx
+config, `try_files` under the existing `app` root already resolves
+`/badge-sim/` → `/badge-sim/index.html`). Static files, no server process
+of its own — redeploy by re-running the build and `scp`ing the three
+output files over the old ones.
+
+**Build it yourself:**
+
+```
+# once, anywhere outside this repo:
+git clone https://github.com/emscripten-core/emsdk ~/.toolchains/emsdk
+~/.toolchains/emsdk/emsdk install latest && ~/.toolchains/emsdk/emsdk activate latest
+
+# every shell that builds:
+source ~/.toolchains/emsdk/emsdk_env.sh
+./sim/build_wasm.sh                # writes sim/out/badge_sim_wasm.{js,wasm} + sim/out/index.html
+cd sim/out && python3 -m http.server 8765   # wasm needs an http origin, file:// won't fetch it
+# open http://localhost:8765/
+```
+
+**What changed vs. the headless build:** one new driver file
+(`sim/src/sim_wasm_main.cpp`, mirrors `sim_main.cpp`'s `fixedTick()` gating
+— exactly one of {upstream's `menu_function_obj.main()`, `badgeMenuLoop()`}
+touches the screen per tick, same as real firmware `loop()`), one new build
+script (`sim/build_wasm.sh`, `em++` instead of `clang++`/`g++`), and one new
+HTML page (`sim/wasm/index.html` — canvas blit + mouse/touch → the same
+`sim_set_touch()`/`Display::updateTouch()` seam the scripted headless modes
+already feed, see `sim/fakes/Display.cpp`). `badge_menu.cpp`,
+`touch_input.cpp`, `badge_nav.cpp`, and `sim/fakes/` are otherwise
+unmodified — this is a driver on top of the existing harness, not a
+rewrite, same as the ticket asked for.
+
+**One real fix, not just a new driver:** `sim/fakes/Arduino.h`'s `min()`/
+`max()` templates returned a dangling reference to a function parameter
+(`decltype(a<b?a:b)` on two same-typed lvalues deduces a reference type —
+always UB the instant the function returns). `clang++`/libc++ happened not
+to clobber that stack slot before the caller read it, so the headless build
+never showed it; `em++`'s different codegen did, immediately, as the root
+menu's pagination footer reading `"1-29807 of 5"` instead of `"1-2 of 5"`.
+Fixed to return by value for both targets — verified `sim/build.sh`'s
+`root`/`fixed`/`back` modes still print the exact same expected values
+after the fix (see their own `printf`s) before trusting the wasm output.
+
+**The Asyncify seam:** `ledBrightnessOptionsScreen()`/`showBatteryStatus()`/
+`toggleBuzzerMute()` (reachable from a "Badge" card, `drawBadgeSubmenu()`)
+each run their own `while (true)` input-poll loop with a `delay(30)`
+between polls — a no-op in the headless sim (time is stepped explicitly by
+the scripted tap harness) but a real hang under WASM: nothing yields back
+to the browser's event loop between iterations, so the mousedown/mouseup
+handlers that feed `sim_set_touch()` never fire, and the tab would freeze
+solid the instant Kevin clicked one of those cards. `sim/build_wasm.sh`
+builds with `-sASYNCIFY=1` and `sim/fakes/Arduino.h`'s `delay()` calls
+`emscripten_sleep()` only under `__EMSCRIPTEN__` (still a no-op natively) —
+the same fix LVGL's own upstream wasm simulator uses for this exact class
+of blocking loop.
+
+**Verified (Playwright + headless Chromium, not just "it compiled"):**
+loaded the live URL, clicked the WiFi card at the same `(120, 116)`
+coordinates `sim_main.cpp`'s own scripted `root`/`fixed` modes use,
+confirmed the canvas repainted into the real WiFi submenu (Sniffers/
+Scanners/Attacks cards, Back control appeared top-left), clicked Back,
+confirmed the canvas returned to a pixel-identical root screen, clicked
+into Bluetooth → Scan/Discover as a second, independent submenu. Zero
+console/page errors across all of it.
+
+**Known gap, not fixed here:** the root menu's own pagination
+(`s_pageStart` in `badge_menu.cpp`) only moves via encoder rotation, not a
+touch/swipe gesture — with 5 root items and 2 visible per page ("1-2 of
+5"), the 3 items past what fits (including the "Badge" card that leads to
+the Asyncify-gated LED Brightness/Battery/Buzzer screens above) aren't
+reachable by mouse alone on this page. That's an existing property of
+`badge_menu.cpp`'s touch model, not something this WASM driver introduced
+or could route around without adding an encoder emulation control this
+ticket's scope ("a driver on the existing harness") didn't ask for. Worth a
+follow-up if Kevin wants full click-reachability of every root item.
+
 ## The actual state of Nexus 78e62be0 right now
 
 The bug this sim reproduced and fixed is the exact bug Jared saw on real

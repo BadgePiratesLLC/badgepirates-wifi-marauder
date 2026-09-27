@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!--
+  BSidesKC Badge simulator — interactive WASM page (Nexus 7b1f65b2).
+
+  Loads sim/build_wasm.sh's output (badge_sim_wasm.js/.wasm) — the same
+  badge_menu.cpp/touch_input.cpp/badge_nav.cpp/UI/CardKit.cpp the native
+  headless sim (sim/build.sh, sim/README.md) and the real firmware both
+  compile, running through the real fixedTick() gating (see
+  sim_wasm_main.cpp). This page only does two things neither the native
+  sim nor the firmware need: blit the framebuffer to a <canvas> every
+  frame, and turn mouse clicks into the same sim_set_touch() feed the
+  native sim's scripted taps use.
+
+  Copied to sim/out/index.html by build_wasm.sh; not itself part of the
+  built artifact.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>BSidesKC Badge simulator (WASM)</title>
+<style>
+  body { background: #1a1a1a; color: #ddd; font-family: system-ui, sans-serif; text-align: center; padding: 24px; }
+  #badge {
+    image-rendering: pixelated;
+    border: 2px solid #444;
+    cursor: pointer;
+    touch-action: none; /* no scroll/zoom gestures eating our taps on a phone/tablet */
+  }
+  #status { margin-top: 12px; color: #888; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h2>BSidesKC Badge simulator</h2>
+  <p>Click cards and the back button, same as tapping the real touchscreen. No badge, no checkout, no terminal.</p>
+  <canvas id="badge" width="320" height="240" style="width: 640px; height: 480px;"></canvas>
+  <div id="status">loading...</div>
+
+  <script src="badge_sim_wasm.js"></script>
+  <script>
+    const canvas = document.getElementById('badge');
+    const statusEl = document.getElementById('status');
+
+    // Canvas resolution (320x240, the real panel's rotated framebuffer
+    // size — sim_wasm_main.cpp's THEME_SCREEN_W/H) is fixed by the CSS
+    // width/height above (2x, so cards are comfortably clickable on a
+    // laptop trackpad). Map a mouse event's CSS-space position back to
+    // canvas-pixel space so sim_wasm_pointer() gets real panel
+    // coordinates, not doubled ones.
+    function toCanvasXY(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = Math.round((evt.clientX - rect.left) * scaleX);
+      const y = Math.round((evt.clientY - rect.top) * scaleY);
+      return [Math.max(0, Math.min(canvas.width - 1, x)), Math.max(0, Math.min(canvas.height - 1, y))];
+    }
+
+    BadgeSimModule().then((Module) => {
+      const pointer = Module.cwrap('sim_wasm_pointer', null, ['number', 'number', 'number']);
+      statusEl.textContent = 'running';
+
+      let down = false;
+      canvas.addEventListener('mousedown', (e) => {
+        down = true;
+        const [x, y] = toCanvasXY(e);
+        pointer(1, x, y);
+      });
+      canvas.addEventListener('mousemove', (e) => {
+        if (!down) return;
+        const [x, y] = toCanvasXY(e);
+        pointer(1, x, y);
+      });
+      window.addEventListener('mouseup', (e) => {
+        if (!down) return;
+        down = false;
+        const [x, y] = toCanvasXY(e);
+        pointer(0, x, y);
+      });
+
+      // Same gesture, touch input (phone/tablet) instead of a mouse —
+      // touch-action:none above stops the browser eating these as scroll.
+      canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const [x, y] = toCanvasXY(e.touches[0]);
+        down = true;
+        pointer(1, x, y);
+      });
+      canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (!down) return;
+        const [x, y] = toCanvasXY(e.touches[0]);
+        pointer(1, x, y);
+      });
+      canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        if (!down) return;
+        down = false;
+        // No coordinates on touchend; last-known position already released.
+        pointer(0, 0, 0);
+      });
+    }).catch((err) => {
+      statusEl.textContent = 'failed to load: ' + err;
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
