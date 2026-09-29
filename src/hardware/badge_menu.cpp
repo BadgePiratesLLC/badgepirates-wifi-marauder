@@ -477,11 +477,25 @@ static void drawBadgeSubmenu() {
 
   enum { Z_LED = 1, Z_BUZZ, Z_BATT, Z_HWTEST };
 
+  struct BadgeRow { int id; const char* title; const char* subtitle; bool navigable; };
+  BadgeRow rows[] = {
+    {Z_LED, "LED Brightness", "Tap to adjust", true},
+    // Buzzer toggles in place (no navigation), so no chevron - visually
+    // distinct from the rows next to it that do go somewhere else.
+    {Z_BUZZ, "Buzzer", buzzerIsMuted() ? "Muted" : "On", false},
+    {Z_BATT, "Battery Status", nullptr, true},
 #ifndef PRODUCTION_BUILD
-  const int ROWS = 4;
-#else
-  const int ROWS = 3;
+    {Z_HWTEST, "Hardware Test", nullptr, true},
 #endif
+  };
+  const int rowCount = sizeof(rows) / sizeof(rows[0]);
+
+  // Same "how many rows fit" derivation and page-window/indicator pattern
+  // as the generic adapter (adaptedMaxVisible/adaptedEnsurePageVisible/
+  // "N-M of T", Nexus 11b37408) - this screen just isn't backed by a
+  // Menu/MenuNode tree, so it can't go through adaptedRender directly.
+  int maxVisible = adaptedMaxVisible(/*isRoot=*/false);
+  int pageStart = 0;
 
   auto render = [&](int pressedZone) {
     lvRepaintBegin("Badge", /*isRoot=*/false, pressedZone == ZONE_BACK, pressedZone == ZONE_GEAR);
@@ -490,24 +504,20 @@ static void drawBadgeSubmenu() {
     uint16_t x = THEME_SPACE_MD;
     uint16_t w = THEME_SCREEN_W - THEME_SPACE_MD * 2;
 
-    CardButton led{{x, y, w, rowH}, "LED Brightness", "Tap to adjust", false, true};
-    drawCard(led, pressedZone == Z_LED);
-    y += rowH + THEME_SPACE_SM;
+    int shown = min(maxVisible, rowCount - pageStart);
+    for (int i = 0; i < shown; i++) {
+      const BadgeRow& r = rows[pageStart + i];
+      CardButton c{{x, y, w, rowH}, r.title, r.subtitle, false, r.navigable};
+      drawCard(c, pressedZone == r.id);
+      y += rowH + THEME_SPACE_SM;
+    }
 
-    // Buzzer toggles in place (no navigation), so no chevron - visually
-    // distinct from the rows next to it that do go somewhere else.
-    CardButton buzz{{x, y, w, rowH}, "Buzzer", buzzerIsMuted() ? "Muted" : "On", false, false};
-    drawCard(buzz, pressedZone == Z_BUZZ);
-    y += rowH + THEME_SPACE_SM;
+    if (rowCount > maxVisible) {
+      char buf[20];
+      snprintf(buf, sizeof(buf), "%d-%d of %d", pageStart + 1, pageStart + shown, rowCount);
+      cardkit_create_hint(s_lvContent, buf, THEME_SCREEN_W / 2, THEME_SCREEN_H - THEME_SPACE_MD - 8 - THEME_STATUSBAR_H);
+    }
 
-    CardButton batt{{x, y, w, rowH}, "Battery Status", nullptr, false, true};
-    drawCard(batt, pressedZone == Z_BATT);
-    y += rowH + THEME_SPACE_SM;
-
-#ifndef PRODUCTION_BUILD
-    CardButton hw{{x, y, w, rowH}, "Hardware Test", nullptr, false, true};
-    drawCard(hw, pressedZone == Z_HWTEST);
-#endif
     lvRepaintEnd();
   };
 
@@ -519,21 +529,37 @@ static void drawBadgeSubmenu() {
     statusbar_pollIndicators(millis());  // this loop blocks badgeMenuLoop()'s own poll - see its comment
     lv_refr_now(nullptr);
 
+    // --- Encoder: scrolls the page when rows overflow, same as root ---
+    bool pageMoved = false;
+    if (rowCount > maxVisible && encoder_turned_up() && pageStart > 0) {
+      pageStart--;
+      pageMoved = true;
+    }
+    if (rowCount > maxVisible && encoder_turned_down() && pageStart < rowCount - maxVisible) {
+      pageStart++;
+      pageMoved = true;
+    }
+    if (pageMoved) {
+      powerManagerResetActivity();
+      render(0);
+      lastPressed = 0;
+      continue;
+    }
+
     uint16_t y = chromeTop(false);
     uint16_t rowH = THEME_CARD_MIN_H;
     uint16_t x = THEME_SPACE_MD;
     uint16_t w = THEME_SCREEN_W - THEME_SPACE_MD * 2;
 
-    TouchZone zones[6];
+    int shown = min(maxVisible, rowCount - pageStart);
+    TouchZone zones[2 + 4];
     int n = 0;
     zones[n++] = {kBackRect, ZONE_BACK};
     zones[n++] = {kGearRect, ZONE_GEAR};
-    zones[n++] = {{x, y, w, rowH}, Z_LED}; y += rowH + THEME_SPACE_SM;
-    zones[n++] = {{x, y, w, rowH}, Z_BUZZ}; y += rowH + THEME_SPACE_SM;
-    zones[n++] = {{x, y, w, rowH}, Z_BATT}; y += rowH + THEME_SPACE_SM;
-#ifndef PRODUCTION_BUILD
-    zones[n++] = {{x, y, w, rowH}, Z_HWTEST};
-#endif
+    for (int i = 0; i < shown; i++) {
+      zones[n++] = {{x, y, w, rowH}, rows[pageStart + i].id};
+      y += rowH + THEME_SPACE_SM;
+    }
 
     int fired = tap.poll(zones, n);
     int pressedNow = 0;
