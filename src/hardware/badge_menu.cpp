@@ -798,6 +798,50 @@ static void toggleBuzzerMute() {
 }
 
 static void runHwTest() {
+#ifdef SIM_BUILD
+  // Nexus 5bebbe4a: making this row reachable (it used to render off-canvas,
+  // see drawBadgeSubmenu()'s paging fix above) exposed a second, pre-existing
+  // gap - the real runInputValidationTest() below reads raw GPIO/touch
+  // hardware that doesn't exist in the browser sim, so the harness stubs it
+  // to a no-op (sim/src/hw_stubs.cpp). An empty stub means the tap silently
+  // did nothing, which Carla's QA (rightly) couldn't distinguish from a
+  // still-broken button. Show an explicit placeholder instead, using the
+  // same lvRepaintBegin/s_lvContent + Back-tap-loop pattern as
+  // showBatteryStatus() so it blits correctly and is genuinely navigable.
+  badgeNavPush(runHwTest, "Hardware Test");
+
+  auto render = [&](bool backPressed) {
+    lvRepaintBegin("Hardware Test", /*isRoot=*/false, backPressed);
+    cardkit_create_hint(s_lvContent, "Not available in simulator",
+                         THEME_SCREEN_W / 2, THEME_SCREEN_H / 2 - THEME_STATUSBAR_H - 8);
+    cardkit_create_hint(s_lvContent, "Press Back or knob to return",
+                         THEME_SCREEN_W / 2, THEME_SCREEN_H / 2 - THEME_STATUSBAR_H + 8);
+    lvRepaintEnd();
+  };
+
+  render(false);
+
+  TapDetector tap;
+  bool lastBackPressed = false;
+  while (true) {
+    statusbar_pollIndicators(millis());
+    lv_refr_now(nullptr);
+
+    TouchZone zones[1] = {{kBackRect, ZONE_BACK}};
+    int fired = tap.poll(zones, 1);
+    bool backPressed = tap.isPressed(ZONE_BACK);
+    if (backPressed != lastBackPressed) {
+      render(backPressed);
+      lastBackPressed = backPressed;
+    }
+
+    if (fired == ZONE_BACK || encoder_button_pressed()) break;
+    delay(30);
+  }
+
+  badgeNavPop();
+  return;
+#endif
   // runInputValidationTest() (input_test.cpp) is a raw hardware bring-up
   // diagnostic that reads touch/buttons/encoder directly - it has to stay
   // independent of LVGL and touch_input.cpp, since its entire job is
