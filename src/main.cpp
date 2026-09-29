@@ -344,6 +344,24 @@ void setup() {
     display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
     menu_function_obj.RunSetup();
 
+    // Nexus 0e69352a: RunSetup()'s internal changeMenu(&mainMenu, true)
+    // (upstream MenuFunctions.cpp ~2929) unconditionally raw-draws
+    // upstream's own thin-text menu list straight to the panel via
+    // TFT_eSPI, bypassing LVGL entirely - the same "changeMenu() redraws
+    // unconditionally regardless of who called it" overwrite 78e62be0
+    // fixed for in-app navigation, just landing here at boot instead,
+    // where it clobbers the still-active splash for the whole
+    // splashDismissWait() hold below (up to 1.5s) until badgeMenuSetup()
+    // finally paints over it. This is the "old upstream menu flash before
+    // the touch-first UI buttons render" Kevin reported on real hardware.
+    // LVGL's dirty-tracking has no idea a non-LVGL draw call just wrote
+    // over its buffer, so a plain lv_refr_now() alone would no-op -
+    // invalidate the splash object first so LVGL actually re-flushes it,
+    // same "resync immediately instead of waiting for a redraw that isn't
+    // coming" fix adaptedResyncNow() already uses for the in-app case.
+    lv_obj_invalidate(splashScreen);
+    lv_refr_now(nullptr);
+
     // Dismiss the splash now: setup()'s real init work (SD, WiFi, battery,
     // GPS, LED) already ran above, consuming most/all of the 1.2-1.8s hold
     // budget - this only waits out whatever's left, or skips it instantly
