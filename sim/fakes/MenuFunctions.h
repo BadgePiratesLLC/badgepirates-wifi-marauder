@@ -85,6 +85,18 @@ private:
   LinkedList<MenuNode> mainList, wifiList, bluetoothList, deviceList;
   LinkedList<MenuNode> wifiSnifferList, wifiScannerList, wifiAttackList, wifiAttackEvilPortalList;
   LinkedList<MenuNode> bluetoothScanList, deviceSettingsList;
+
+  // Fake "results" submenus (Nexus 155c1226) — canned data so Kevin can
+  // visually tune density/layout for the previously-no-op Sniffer/Scanner/
+  // Bluetooth-scan leaves. Same pattern as wifiAttackEvilPortalMenu above:
+  // parentMenu points back to the reached-from menu so the generic back
+  // stack works, rows are non-navigable leaves with no-op callables.
+  Menu wifiSnifferProbeResultsMenu, wifiSnifferBeaconResultsMenu, wifiSnifferDeauthResultsMenu;
+  Menu wifiScannerApResultsMenu, wifiScannerStationResultsMenu;
+  Menu bluetoothScanClassicResultsMenu, bluetoothScanBleResultsMenu;
+  LinkedList<MenuNode> wifiSnifferProbeResultsList, wifiSnifferBeaconResultsList, wifiSnifferDeauthResultsList;
+  LinkedList<MenuNode> wifiScannerApResultsList, wifiScannerStationResultsList;
+  LinkedList<MenuNode> bluetoothScanClassicResultsList, bluetoothScanBleResultsList;
   int menu_start_index = 0;
   bool disable_touch = false;
 
