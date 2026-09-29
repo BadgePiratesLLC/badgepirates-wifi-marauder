@@ -57,7 +57,7 @@ for f in $LVGL_SRCS; do
 done
 
 em++ -std=c++17 "${COMMON_FLAGS[@]}" \
-  -sEXPORTED_FUNCTIONS=_main,_sim_wasm_pointer,_sim_wasm_screen_w,_sim_wasm_screen_h \
+  -sEXPORTED_FUNCTIONS=_main,_sim_wasm_pointer,_sim_wasm_screen_w,_sim_wasm_screen_h,_sim_wasm_encoder_up,_sim_wasm_encoder_down,_sim_wasm_encoder_press \
   -sEXPORTED_RUNTIME_METHODS=ccall,cwrap \
   -sALLOW_MEMORY_GROWTH=1 \
   -sMODULARIZE=1 -sEXPORT_NAME=BadgeSimModule \

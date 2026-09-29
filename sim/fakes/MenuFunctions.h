@@ -70,8 +70,21 @@ public:
   int phantomDiscoverFireCount = 0;
 
 private:
+  // Nexus 11b37408: WiFi/Bluetooth/Device used to bottom out one level
+  // below root with no-op leaf callables (`[]() {}`) - a "behavioral
+  // model" scoped to Nexus 0f35e128's one specific double-fire repro,
+  // never extended once this same fake started backing the interactive
+  // WASM sim (7b1f65b2). Every card below was a real, tappable, visually
+  // "goes somewhere" dead end. These give each branch the real depth
+  // upstream's actual menu tree has (see esp32marauder-upstream/
+  // esp32_marauder/MenuFunctions.cpp's own wifiSnifferMenu/wifiScannerMenu/
+  // wifiAttackMenu/settingsMenu for the shape this mirrors).
   Menu mainMenu, wifiMenu, bluetoothMenu, deviceMenu;
+  Menu wifiSnifferMenu, wifiScannerMenu, wifiAttackMenu, wifiAttackEvilPortalMenu;
+  Menu bluetoothScanMenu, deviceSettingsMenu;
   LinkedList<MenuNode> mainList, wifiList, bluetoothList, deviceList;
+  LinkedList<MenuNode> wifiSnifferList, wifiScannerList, wifiAttackList, wifiAttackEvilPortalList;
+  LinkedList<MenuNode> bluetoothScanList, deviceSettingsList;
   int menu_start_index = 0;
   bool disable_touch = false;
 

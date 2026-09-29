@@ -51,21 +51,66 @@ WiFiScan wifi_scan_obj;
 #define DOWN_BUTTON   2
 
 void MenuFunctions::RunSetup() {
-  wifiList.add(MenuNode{"Sniffers", false, 0, 0, nullptr, false, []() {}});
-  wifiList.add(MenuNode{"Scanners", false, 0, 0, nullptr, false, []() {}});
-  wifiList.add(MenuNode{"Attacks",  false, 0, 0, nullptr, false, []() {}});
+  // WiFi -> Attacks -> Evil Portal: the one branch given a real 4th level
+  // (matching esp32marauder-upstream's own wifiAttackMenu "Evil Portal"
+  // entry), so root-menu depth is provable without inventing screens that
+  // don't exist upstream. Leaves stay no-op deliberately - they're where a
+  // real scan/attack mode would start (out of scope per sim/README.md's
+  // "what this does NOT cover"), not another menu to navigate.
+  wifiAttackEvilPortalList.add(MenuNode{"Start", false, 0, 0, nullptr, false, []() {}});
+  wifiAttackEvilPortalList.add(MenuNode{"Stop",  false, 0, 0, nullptr, false, []() {}});
+  wifiAttackEvilPortalMenu.name = "Evil Portal"; wifiAttackEvilPortalMenu.parentMenu = &wifiAttackMenu;
+  wifiAttackEvilPortalMenu.list = &wifiAttackEvilPortalList;
+
+  wifiSnifferList.add(MenuNode{"Probe Sniff",  false, 0, 0, nullptr, false, []() {}});
+  wifiSnifferList.add(MenuNode{"Beacon Sniff", false, 0, 0, nullptr, false, []() {}});
+  wifiSnifferList.add(MenuNode{"Deauth Sniff", false, 0, 0, nullptr, false, []() {}});
+  wifiSnifferMenu.name = "Sniffers"; wifiSnifferMenu.parentMenu = &wifiMenu; wifiSnifferMenu.list = &wifiSnifferList;
+
+  wifiScannerList.add(MenuNode{"AP Scan",      false, 0, 0, nullptr, false, []() {}});
+  wifiScannerList.add(MenuNode{"Station Scan", false, 0, 0, nullptr, false, []() {}});
+  wifiScannerMenu.name = "Scanners"; wifiScannerMenu.parentMenu = &wifiMenu; wifiScannerMenu.list = &wifiScannerList;
+
+  wifiAttackList.add(MenuNode{"Deauth Attack", false, 0, 0, nullptr, false, []() {}});
+  wifiAttackList.add(MenuNode{"Beacon Spam",   false, 0, 0, nullptr, false, []() {}});
+  wifiAttackList.add(MenuNode{"Evil Portal",   false, 0, 0, nullptr, false, [this]() { changeMenu(&wifiAttackEvilPortalMenu); }});
+  wifiAttackMenu.name = "Attacks"; wifiAttackMenu.parentMenu = &wifiMenu; wifiAttackMenu.list = &wifiAttackList;
+
+  wifiList.add(MenuNode{"Sniffers", false, 0, 0, nullptr, false, [this]() { changeMenu(&wifiSnifferMenu); }});
+  wifiList.add(MenuNode{"Scanners", false, 0, 0, nullptr, false, [this]() { changeMenu(&wifiScannerMenu); }});
+  wifiList.add(MenuNode{"Attacks",  false, 0, 0, nullptr, false, [this]() { changeMenu(&wifiAttackMenu); }});
   wifiMenu.name = "WiFi"; wifiMenu.parentMenu = &mainMenu; wifiMenu.list = &wifiList;
 
-  bluetoothList.add(MenuNode{"Scan", false, 0, 0, nullptr, false, []() {}});
+  bluetoothScanList.add(MenuNode{"Classic", false, 0, 0, nullptr, false, []() {}});
+  bluetoothScanList.add(MenuNode{"BLE",     false, 0, 0, nullptr, false, []() {}});
+  bluetoothScanMenu.name = "Scan"; bluetoothScanMenu.parentMenu = &bluetoothMenu; bluetoothScanMenu.list = &bluetoothScanList;
+
+  bluetoothList.add(MenuNode{"Scan", false, 0, 0, nullptr, false, [this]() { changeMenu(&bluetoothScanMenu); }});
   bluetoothList.add(MenuNode{"Discover", false, 0, 0, nullptr, false, [this]() { phantomDiscoverFireCount++; }});
   bluetoothMenu.name = "Bluetooth"; bluetoothMenu.parentMenu = &mainMenu; bluetoothMenu.list = &bluetoothList;
 
+  // "Settings " (trailing space, deliberate): src/hardware/badge_menu.cpp's
+  // settingsScreen() -> navigateByNodeName() looks for this exact upstream
+  // node name (its own comment cites lang_var.h's text1_9/text1_18,
+  // "trailing space included") to reach Device -> Settings the same way a
+  // real tap on those two cards would. The old fake's plain "Device" (no
+  // space) meant that lookup always failed silently - the gear icon's
+  // "Marauder" card was a second, independent dead end from the one this
+  // ticket's diagnosis found in badgeMenuLoop() itself.
+  deviceSettingsList.add(MenuNode{"Brightness", false, 0, 0, nullptr, false, []() {}});
+  deviceSettingsList.add(MenuNode{"Sound",      false, 0, 0, nullptr, false, []() {}});
+  deviceSettingsMenu.name = "Settings"; deviceSettingsMenu.parentMenu = &deviceMenu; deviceSettingsMenu.list = &deviceSettingsList;
+
   deviceList.add(MenuNode{"About", false, 0, 0, nullptr, false, []() {}});
+  deviceList.add(MenuNode{"Settings ", false, 0, 0, nullptr, false, [this]() { changeMenu(&deviceSettingsMenu); }});
   deviceMenu.name = "Device"; deviceMenu.parentMenu = &mainMenu; deviceMenu.list = &deviceList;
 
   mainList.add(MenuNode{"WiFi",      false, 0, 0, nullptr, false, [this]() { changeMenu(&wifiMenu); }});
   mainList.add(MenuNode{"Bluetooth", false, 0, 0, nullptr, false, [this]() { changeMenu(&bluetoothMenu); }});
-  mainList.add(MenuNode{"Device",    false, 0, 0, nullptr, false, [this]() { changeMenu(&deviceMenu); }});
+  // "Device " (trailing space, deliberate): see the "Settings " comment
+  // above - settingsScreen()'s navigateByNodeName(s_mainMenu, "Device ")
+  // needs this exact name to find its way to deviceMenu at all.
+  mainList.add(MenuNode{"Device ",   false, 0, 0, nullptr, false, [this]() { changeMenu(&deviceMenu); }});
   mainList.add(MenuNode{"Reboot",    false, 0, 0, nullptr, false, []() {}});
   mainMenu.name = "Main Menu"; mainMenu.parentMenu = nullptr; mainMenu.list = &mainList;
 

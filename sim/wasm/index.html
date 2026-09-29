@@ -27,12 +27,25 @@
     touch-action: none; /* no scroll/zoom gestures eating our taps on a phone/tablet */
   }
   #status { margin-top: 12px; color: #888; font-size: 13px; }
+  #encoder { margin-top: 12px; }
+  #encoder button {
+    background: #2a2a2a; color: #ddd; border: 1px solid #444; border-radius: 6px;
+    font-size: 14px; padding: 8px 16px; margin: 0 6px; cursor: pointer;
+  }
+  #encoder button:active { background: #444; }
 </style>
 </head>
 <body>
   <h2>BSidesKC Badge simulator</h2>
-  <p>Click cards and the back button, same as tapping the real touchscreen. No badge, no checkout, no terminal.</p>
+  <p>Click cards and the back button, same as tapping the real touchscreen. No badge, no checkout, no terminal.
+  Use the &uarr;/press/&darr; controls below (or the arrow/Enter keys) to page past the visible cards, same as
+  the badge's own rotary encoder knob on real hardware.</p>
   <canvas id="badge" width="320" height="240" style="width: 640px; height: 480px;"></canvas>
+  <div id="encoder">
+    <button id="encUp" title="Encoder up (or the &uarr; key)">&uarr;</button>
+    <button id="encPress" title="Encoder press / select (or the Enter key)">press</button>
+    <button id="encDown" title="Encoder down (or the &darr; key)">&darr;</button>
+  </div>
   <div id="status">loading...</div>
 
   <script src="badge_sim_wasm.js"></script>
@@ -97,6 +110,24 @@
         down = false;
         // No coordinates on touchend; last-known position already released.
         pointer(0, 0, 0);
+      });
+
+      // Rotary encoder stand-in (Nexus 11b37408) - the badge's real
+      // secondary input for paging past a screen's visible cards
+      // (badge_menu.cpp's adaptedMaxVisible()/adaptedEnsurePageVisible()),
+      // with no touch equivalent by design. Without this, anything past
+      // the first page of any menu - including root's own Device/Badge/
+      // Reboot rows - was unreachable by mouse in this page.
+      const encUp = Module.cwrap('sim_wasm_encoder_up', null, []);
+      const encDown = Module.cwrap('sim_wasm_encoder_down', null, []);
+      const encPress = Module.cwrap('sim_wasm_encoder_press', null, []);
+      document.getElementById('encUp').addEventListener('click', () => encUp());
+      document.getElementById('encDown').addEventListener('click', () => encDown());
+      document.getElementById('encPress').addEventListener('click', () => encPress());
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp') { e.preventDefault(); encUp(); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); encDown(); }
+        else if (e.key === 'Enter') { e.preventDefault(); encPress(); }
       });
     }).catch((err) => {
       statusEl.textContent = 'failed to load: ' + err;

@@ -69,6 +69,23 @@ EM_JS(void, js_blit_frame, (const uint8_t* rgb, int w, int h), {
   Module.__badgeCtx.putImageData(Module.__badgeImgData, 0, 0);
 });
 
+// Exported so lv_disp_port_sim.cpp's flush_cb (the one place every screen -
+// blocking while(true) loops included - actually writes new pixels into
+// gFb) can push a frame to the canvas the moment it happens, not just once
+// per requestAnimationFrame. Nexus 11b37408: badgeMenuLoop()'s blocking
+// screens (Settings, Badge submenu, LED Brightness, ...) call delay()
+// in their own input loop, which under Asyncify (sim/fakes/Arduino.h)
+// suspends fixedTick() mid-call - the frame()'s own js_blit_frame() below
+// is textually after fixedTick() and never runs again until that whole
+// blocking screen exits, so the canvas froze on whatever was last blitted
+// before the screen was entered, even though current_menu/LVGL had moved
+// on. Blitting from inside the flush callback itself sidesteps that
+// ordering entirely: a paint always reaches the canvas the instant it
+// happens, suspended call stack or not.
+extern "C" void sim_wasm_blit_now() {
+  js_blit_frame(gFb.rgb.data(), gFb.w, gFb.h);
+}
+
 static double s_lastFrameMs = -1;
 
 static void fixedTick() {
@@ -87,7 +104,7 @@ static void frame() {
 
   fixedTick();
 
-  js_blit_frame(gFb.rgb.data(), gFb.w, gFb.h);
+  sim_wasm_blit_now();
 }
 
 extern "C" {
@@ -108,6 +125,27 @@ int sim_wasm_screen_w() { return THEME_SCREEN_W; }
 
 EMSCRIPTEN_KEEPALIVE
 int sim_wasm_screen_h() { return THEME_SCREEN_H; }
+
+// Nexus 11b37408: the root menu (and any submenu longer than one screen's
+// worth of cards) only pages past adaptedMaxVisible() rows via the
+// encoder - badge_menu.cpp's touch zones never included a scroll/page
+// affordance (encoder is "secondary input", not a replacement - see its
+// own comment). Real CC13 hardware has a physical rotary encoder for
+// this; this page's mouse/touch wiring (sim/wasm/index.html) had nothing
+// standing in for it, so anything past the first
+// adaptedMaxVisible(isRoot) rows - Device, Badge, Reboot at root among
+// them - was permanently unreachable by a mouse. These three set the
+// exact g_sim flags hw_stubs.cpp's encoder_turned_up()/_down()/
+// _button_pressed() already consume; wiring them to on-page controls is
+// the only change this ticket needed here.
+EMSCRIPTEN_KEEPALIVE
+void sim_wasm_encoder_up() { g_sim.encUp = true; }
+
+EMSCRIPTEN_KEEPALIVE
+void sim_wasm_encoder_down() { g_sim.encDown = true; }
+
+EMSCRIPTEN_KEEPALIVE
+void sim_wasm_encoder_press() { g_sim.encPress = true; }
 
 }  // extern "C"
 
